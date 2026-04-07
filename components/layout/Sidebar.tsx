@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -23,7 +25,9 @@ export function Sidebar() {
   return (
     <div className="flex flex-col h-screen w-64 bg-[#052e36] text-white flex-shrink-0 font-sans">
       <div className="p-6">
-        <h1 className="text-2xl font-bold tracking-tight">Naya.</h1>
+        <h1 className="text-3xl font-heading font-extrabold tracking-widest text-white flex items-baseline">
+          NAYA<span className="text-[#a48443] leading-none ml-0.5">.</span>
+        </h1>
       </div>
 
       <nav className="flex-1 px-4 py-8 space-y-2 overflow-y-auto">

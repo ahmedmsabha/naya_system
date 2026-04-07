@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { TopHeader } from "@/components/layout/TopHeader";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
   subsets: ["latin"],
 });
 
@@ -25,20 +23,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="flex h-full min-h-screen bg-[#fcfcfc] text-gray-900 overflow-hidden">
-        <Sidebar />
-        <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-          <TopHeader />
-          <main className="flex-1 overflow-y-auto w-full relative bg-white">
-            <div className="min-h-full p-8 max-w-7xl mx-auto">
-              {children}
-            </div>
-          </main>
-        </div>
+    <html lang="en" className={`${inter.variable} ${montserrat.variable} h-full antialiased`}>
+      <body className="h-full min-h-screen bg-[#fcfcfc] text-gray-900 overflow-hidden font-sans">
+        {children}
       </body>
     </html>
   );
