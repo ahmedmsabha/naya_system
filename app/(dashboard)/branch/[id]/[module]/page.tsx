@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowLeft, Warehouse, Users, BarChart3, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
 
 export default async function ModuleDashboard({
   params,
@@ -10,12 +12,16 @@ export default async function ModuleDashboard({
 }) {
   const { id, module } = await params;
 
-  // Format names from params
-  const branchName = id
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+  const supabase = await createClient();
+  const { data: branch } = await supabase
+    .from("branches")
+    .select("name")
+    .eq("id", id)
+    .single();
 
+  if (!branch) notFound();
+
+  const branchName = branch.name;
   const moduleName = module.charAt(0).toUpperCase() + module.slice(1);
 
   // Pick correct icon

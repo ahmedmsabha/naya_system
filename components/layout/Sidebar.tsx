@@ -23,7 +23,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="flex flex-col h-screen w-64 bg-[#052e36] text-white flex-shrink-0 font-sans">
+    <div className="flex flex-col h-screen w-64 bg-[#052e36] text-white shrink-0 font-sans">
       <div className="p-6">
         <h1 className="text-3xl font-heading font-extrabold tracking-widest text-white flex items-baseline">
           NAYA<span className="text-[#a48443] leading-none ml-0.5">.</span>
@@ -43,8 +43,8 @@ export function Sidebar() {
                   : "text-gray-300 hover:text-white hover:bg-white/10"
               }`}
             >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {item.name}
+              <item.icon className="w-5 h-5 shrink-0" />
+              <span className="shrink-0">{item.name}</span>
             </Link>
           );
         })}

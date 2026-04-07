@@ -1,28 +1,24 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { MapPin, ChevronRight } from "lucide-react";
+import { MapPin, ChevronRight, AlertCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 
-export default function GlobalDashboard() {
-  const branches = [
-    {
-      id: "georgetown",
-      name: "Georgetown",
-      address: "Potomac St NW, Washington, DC 20007",
-      status: "ACTIVE",
-    },
-    {
-      id: "pennsylvania-ave",
-      name: "Pennsylvania Ave",
-      address: "Pennsylvania Ave NW, DC 20006",
-      status: "ACTIVE",
-    },
-    {
-      id: "wharf-maine",
-      name: "Wharf Maine",
-      address: "Maine Ave SW, Washington, DC 20024",
-      status: "ACTIVE",
-    },
-  ];
+export default async function GlobalDashboard() {
+  const supabase = await createClient();
+  const { data: branches, error } = await supabase.from("branches").select("*").order("name");
+
+  if (error) {
+    return (
+      <div className="p-8 text-center bg-red-50 text-red-600 rounded-xl max-w-lg mx-auto mt-20 border border-red-100 flex flex-col items-center">
+        <AlertCircle className="w-12 h-12 mb-4" />
+        <h2 className="font-bold text-lg mb-2">Database Error</h2>
+        <p className="text-sm">Could not fetch branches from Supabase. Have you run the SQL setup script?</p>
+      </div>
+    );
+  }
+
+  // Fallback to demo layout if empty because SQL hasn't been run yet
+  const displayBranches = branches?.length > 0 ? branches : [];
 
   return (
     <div className="pt-2 px-2 max-w-5xl">
@@ -36,7 +32,7 @@ export default function GlobalDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {branches.map((branch) => (
+        {displayBranches.map((branch) => (
           <Link key={branch.id} href={`/branch/${branch.id}`} className="group block focus:outline-none focus:ring-2 focus:ring-[#052e36] rounded-[2rem]">
             <Card className="h-full rounded-[2rem] p-8 border-gray-100 shadow-sm hover:shadow-md transition-shadow group-hover:border-gray-200 bg-white group-active:scale-[0.98] duration-200">
               <div className="space-y-6">
@@ -47,7 +43,7 @@ export default function GlobalDashboard() {
                 <div>
                   <h2 className="text-xl font-bold text-[#052e36] mb-2">{branch.name}</h2>
                   <p className="text-xs text-gray-400 max-w-[200px] leading-relaxed">
-                    {branch.address}
+                    {branch.location}
                   </p>
                 </div>
 

@@ -1,8 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { loginAction } from "./actions";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const params = await searchParams;
   return (
     <div className="flex w-full h-screen">
       {/* LEFT SIDE - IMAGE */}
@@ -14,7 +20,7 @@ export default function LoginPage() {
           className="object-cover opacity-80"
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-black/30" />
 
         <div className="absolute inset-0 p-16 flex flex-col justify-end text-white">
           <h2 className="text-4xl font-heading font-black tracking-tight mb-4 leading-tight">
@@ -48,39 +54,48 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-4 pt-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-600 block">
-                  Work Email
-                </label>
-                <input
-                  type="email"
-                  placeholder="name@company.com"
-                  className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#052e36] transition-all text-sm"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-semibold text-gray-600 block">
-                    Password
-                  </label>
-                  <Link href="#" className="text-xs font-semibold text-[#a48443] hover:text-[#8b6f39] transition-colors">
-                    Forgot Password?
-                  </Link>
+              {params?.error && (
+                <div className="bg-red-50 text-red-600 text-sm font-semibold p-3 rounded-lg text-center border border-red-100">
+                  {params.error}
                 </div>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#052e36] transition-all text-sm"
-                />
-              </div>
-            </div>
+              )}
+              <form action={loginAction} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-600 block">
+                    Work Email
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="name@company.com"
+                    defaultValue="admin@naya.com" /* Default for testing */
+                    className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#052e36] transition-all text-sm"
+                  />
+                </div>
 
-            <Link href="/" className="block">
-              <Button className="w-full h-12 bg-[#052e36] text-white hover:bg-[#08434f] rounded-xl font-bold text-[15px] mt-4 shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-[#052e36]">
-                Secure Sign In
-              </Button>
-            </Link>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-gray-600 block">
+                      Password
+                    </label>
+                    <Link href="#" className="text-xs font-semibold text-[#a48443] hover:text-[#8b6f39] transition-colors">
+                      Forgot Password?
+                    </Link>
+                  </div>
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="••••••••"
+                    defaultValue="password123" /* Default for testing */
+                    className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#052e36] transition-all text-sm"
+                  />
+                </div>
+
+                <Button type="submit" className="w-full h-12 bg-[#052e36] text-white hover:bg-[#08434f] rounded-xl font-bold text-[15px] mt-4 shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-[#052e36]">
+                  Secure Sign In
+                </Button>
+              </form>
+            </div>
 
             <p className="text-xs text-center text-gray-400 font-medium">
               By signing in, you agree to Naya&apos;s Terms of Service and Privacy Policy.

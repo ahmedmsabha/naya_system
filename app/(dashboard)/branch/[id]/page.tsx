@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, Warehouse, Users, BarChart3, Settings, ChevronRight } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
 
 export default async function BranchDashboard({
   params,
@@ -9,11 +11,16 @@ export default async function BranchDashboard({
 }) {
   const { id } = await params;
 
-  // Format branch name from id (for demo)
-  const branchName = id
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+  const supabase = await createClient();
+  const { data: branch } = await supabase
+    .from("branches")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (!branch) notFound();
+
+  const branchName = branch.name;
 
   const modules = [
     {
@@ -55,7 +62,7 @@ export default async function BranchDashboard({
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-16">
         <div>
           <h1 className="text-4xl font-black text-[#052e36] tracking-tight mb-2">
-            {branchName === "Pennsylvania ave" ? "Pennsylvania Ave" : branchName}
+            {branchName}
           </h1>
           <p className="text-gray-400 text-lg">Branch Operation Center</p>
         </div>
