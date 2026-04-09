@@ -25,24 +25,28 @@ export default async function BranchDashboard({
   const modules = [
     {
       id: "warehouse",
+      href: `/branch/${id}/warehouse`,
       title: "Warehouse",
       subtitle: "Inventory & Stock",
       icon: Warehouse,
     },
     {
       id: "staffing",
+      href: `/branch/${id}/staffing`,
       title: "Staffing",
       subtitle: "Employee Records",
       icon: Users,
     },
     {
       id: "financials",
+      href: `/branch/${id}/financials`,
       title: "Financials",
       subtitle: "P&L Reports",
       icon: BarChart3,
     },
     {
       id: "settings",
+      href: `/branch/${id}/settings`,
       title: "Settings",
       subtitle: "Branch Config",
       icon: Settings,
@@ -87,7 +91,7 @@ export default async function BranchDashboard({
         {modules.map((module) => (
           <Link
             key={module.id}
-            href={`/branch/${id}/${module.id}`}
+            href={module.href}
             className="group block focus:outline-none focus:ring-2 focus:ring-[#052e36] rounded-[2.5rem]"
           >
             <Card className="h-full rounded-[2.5rem] p-10 border-gray-100 shadow-sm hover:shadow-md transition-shadow group-hover:border-gray-200 bg-white group-active:scale-[0.98] duration-200">

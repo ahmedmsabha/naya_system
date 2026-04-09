@@ -9,10 +9,12 @@ import {
   Warehouse,
   Users,
   LogOut,
+  Wallet,
 } from "lucide-react";
 
 const navigation = [
   { name: "Management", href: "/", icon: LayoutDashboard },
+  { name: "Smart Accountant", href: "/accountant", icon: Wallet },
   { name: "Investor View", href: "/investor", icon: Target },
   { name: "Financials", href: "/financials", icon: BarChart3 },
   { name: "Warehouse", href: "/warehouse", icon: Warehouse },

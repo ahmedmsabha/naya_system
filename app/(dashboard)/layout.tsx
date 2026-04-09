@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopHeader } from "@/components/layout/TopHeader";
+import { TarekFloatingButton } from "@/components/finance/TarekFloatingButton";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
@@ -15,16 +16,23 @@ export default async function DashboardLayout({
     redirect("/login");
   }
   return (
-    <div className="flex h-full min-h-screen w-full overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <TopHeader />
-        <main className="flex-1 overflow-y-auto w-full relative bg-white">
-          <div className="min-h-full p-8 max-w-7xl mx-auto">
+    <div className="flex h-full min-h-screen w-full overflow-hidden print:block print:overflow-visible">
+      <div className="print:hidden">
+        <Sidebar />
+      </div>
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative print:block print:overflow-visible">
+        <div className="print:hidden">
+          <TopHeader />
+        </div>
+        <main className="flex-1 overflow-y-auto w-full relative bg-white print:overflow-visible print:bg-white">
+          <div className="min-h-full p-8 max-w-7xl mx-auto print:p-0 print:max-w-none">
             {children}
           </div>
         </main>
       </div>
+
+      {/* Global AI Accountant Access */}
+      <TarekFloatingButton />
     </div>
   );
 }
