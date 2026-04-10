@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { FileText, ExternalLink } from "lucide-react";
+import { Calendar, FileText, ExternalLink } from "lucide-react";
 import { DeleteArchiveButton } from "@/components/warehouse/DeleteArchiveButton";
+
+export const dynamic = "force-dynamic";
 
 export default async function WarehouseArchivePage({
   params,
@@ -26,12 +28,14 @@ export default async function WarehouseArchivePage({
     .select("id, invoice_number, total_amount, billing_period_end, created_at")
     .eq("branch_id", id)
     .eq("status", "archived")
-    .order("created_at", { ascending: false });
+    .order("billing_period_end", { ascending: false });
 
   // Group by month
   const grouped: Record<string, typeof invoices> = {};
   (invoices ?? []).forEach((inv) => {
-    const date = new Date(inv.created_at);
+    // Use the invoice’s own period end date for archive grouping/sorting,
+    // so the archive reflects the day the invoice was generated for.
+    const date = new Date(inv.billing_period_end);
     const key = date.toLocaleDateString("en-US", { year: "numeric", month: "long" });
     if (!grouped[key]) grouped[key] = [];
     grouped[key]!.push(inv);
@@ -90,6 +94,16 @@ export default async function WarehouseArchivePage({
                        <h3 className="text-lg font-black text-[#052e36] uppercase tracking-tight">
                          {branch.name} #{inv.invoice_number}
                        </h3>
+                       <div className="mt-3 inline-flex items-center gap-2 text-[10px] font-black text-gray-400 tracking-[.25em] uppercase">
+                         <Calendar className="w-3.5 h-3.5 text-gray-300" />
+                         <span>
+                           {new Date(inv.billing_period_end).toLocaleDateString("en-US", {
+                             month: "short",
+                             day: "2-digit",
+                             year: "numeric",
+                           })}
+                         </span>
+                       </div>
                     </div>
 
                     <div className="flex gap-3">

@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { setQuantity } from "@/app/(dashboard)/branch/[id]/warehouse/actions";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { deleteInventoryItem, setQuantity } from "@/app/(dashboard)/branch/[id]/warehouse/actions";
+import { Trash2 } from "lucide-react";
 
-interface InventoryItem {
+export interface InventoryItem {
   id: string; // inventory row id
   ingredient_id: string;
   ingredient_name: string;
@@ -22,7 +24,7 @@ export function InventoryGrid({
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {items.map((item) => (
         <InventoryCard 
-          key={item.id} 
+          key={`${item.id}-${item.quantity_on_hand}`} 
           item={item} 
           branchId={branchId} 
           multiplier={multiplier} 
@@ -44,12 +46,9 @@ function InventoryCard({
   // Local state for instant UI update
   const [tempQty, setTempQty] = useState(item.quantity_on_hand);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
-
-  // Sync local state when prop changes (e.g. after successful server revalidation)
-  useEffect(() => {
-    setTempQty(item.quantity_on_hand);
-  }, [item.quantity_on_hand]);
+  const router = useRouter();
 
   const syncWithServer = (finalQty: number) => {
     setIsSyncing(true);
@@ -61,6 +60,7 @@ function InventoryCard({
     // We don't await here in the loop, just fire it off
     setQuantity(fd).finally(() => {
       setIsSyncing(false);
+      router.refresh();
     });
   };
 
@@ -79,6 +79,22 @@ function InventoryCard({
     }, 600); // 600ms delay after last click
   };
 
+  const handleDelete = async () => {
+    const ok = window.confirm(`Delete "${item.ingredient_name}" from this branch?`);
+    if (!ok) return;
+    setIsDeleting(true);
+    try {
+      const fd = new FormData();
+      fd.set("inventory_id", item.id);
+      fd.set("branch_id", branchId);
+      const res = await deleteInventoryItem(fd);
+      if (res?.error) alert(res.error);
+    } finally {
+      setIsDeleting(false);
+      router.refresh();
+    }
+  };
+
   return (
     <div
       className={`bg-white rounded-3xl border border-gray-100 p-6 flex flex-col gap-4 transition-all hover:shadow-sm ${
@@ -90,9 +106,21 @@ function InventoryCard({
         <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
           {item.unit === 'UNIT' ? 'BUCKET' : item.unit}
         </span>
-        {isSyncing && (
-          <span className="w-1.5 h-1.5 bg-[#2563eb] rounded-full animate-pulse" />
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting || isSyncing}
+            className="w-9 h-9 rounded-2xl border border-gray-100 bg-gray-50 hover:bg-red-50 hover:border-red-100 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors disabled:opacity-50"
+            aria-label="Delete item"
+            title="Delete item"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          {(isSyncing || isDeleting) && (
+            <span className="w-1.5 h-1.5 bg-[#2563eb] rounded-full animate-pulse" />
+          )}
+        </div>
       </div>
 
       {/* Item name */}

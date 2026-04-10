@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { InvoiceActions } from "@/components/warehouse/InvoiceActions";
 
+export const dynamic = "force-dynamic";
+
 function generateInvoiceNumber(branchId: string): string {
   const hash = branchId.replace(/-/g, "").slice(0, 6).toUpperCase();
   return `NF-${hash}`;
@@ -11,11 +13,14 @@ function generateInvoiceNumber(branchId: string): string {
 
 export default async function WarehouseInvoicePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: { historical?: string };
 }) {
   const { id } = await params;
   const supabase = await createClient();
+  const historicalInvoiceId = searchParams?.historical;
 
   const { data: branch } = await supabase
     .from("branches")
@@ -25,32 +30,78 @@ export default async function WarehouseInvoicePage({
 
   if (!branch) notFound();
 
-  // Fetch inventory items with costs
-  const { data: inventoryRows } = await supabase
-    .from("inventory")
-    .select(`quantity_on_hand, ingredients ( name, unit, cost_per_unit )`)
-    .eq("branch_id", id)
-    .gt("quantity_on_hand", 0);
-
-  const lineItems = (inventoryRows ?? []).map((row) => {
-    const ing = Array.isArray(row.ingredients) ? row.ingredients[0] : row.ingredients;
-    const qty = Number(row.quantity_on_hand);
-    const rate = Number(ing?.cost_per_unit ?? 0);
-    return {
-      name: ing?.name ?? "Unknown",
-      unit: ing?.unit ?? "UNIT",
-      qty,
-      rate,
-      amount: qty * rate,
-    };
-  });
-
-  const total = lineItems.reduce((sum, l) => sum + l.amount, 0);
-
-  const today = new Date();
-  const billingEnd = new Date(today);
-  billingEnd.setDate(today.getDate() + 6);
   const invoiceNumber = generateInvoiceNumber(id);
+
+  // If viewing a historical invoice, load persisted header + line items.
+  // Otherwise compute from current inventory snapshot.
+  const today = new Date();
+  const defaultBillingEnd = new Date(today);
+  defaultBillingEnd.setDate(today.getDate() + 6);
+
+  let billingEnd = defaultBillingEnd;
+  let billingStartLabel: string | null = today.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  let lineItems: Array<{ name: string; unit: string; qty: number; rate: number; amount: number }> = [];
+  let total = 0;
+
+  if (historicalInvoiceId) {
+    const { data: invoice } = await supabase
+      .from("warehouse_invoices")
+      .select("id, invoice_number, total_amount, billing_period_start, billing_period_end, created_at, status")
+      .eq("id", historicalInvoiceId)
+      .eq("branch_id", id)
+      .maybeSingle();
+
+    if (!invoice) notFound();
+
+    const { data: invoiceItems } = await supabase
+      .from("warehouse_invoice_items")
+      .select("quantity, unit_cost, ingredients ( name, unit )")
+      .eq("invoice_id", invoice.id);
+
+    billingEnd = new Date(invoice.billing_period_end);
+    billingStartLabel = new Date(invoice.billing_period_start).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+
+    lineItems = (invoiceItems ?? []).map((row) => {
+      const ing = Array.isArray(row.ingredients) ? row.ingredients[0] : row.ingredients;
+      const qty = Number(row.quantity);
+      const rate = Number(row.unit_cost);
+      return {
+        name: ing?.name ?? "Unknown",
+        unit: ing?.unit ?? "UNIT",
+        qty,
+        rate,
+        amount: qty * rate,
+      };
+    });
+
+    total = Number(invoice.total_amount ?? 0) || lineItems.reduce((sum, l) => sum + l.amount, 0);
+  } else {
+    // Fetch inventory items with costs (current view)
+    const { data: inventoryRows } = await supabase
+      .from("inventory")
+      .select(`quantity_on_hand, ingredients ( name, unit, cost_per_unit )`)
+      .eq("branch_id", id)
+      .gt("quantity_on_hand", 0);
+
+    lineItems = (inventoryRows ?? []).map((row) => {
+      const ing = Array.isArray(row.ingredients) ? row.ingredients[0] : row.ingredients;
+      const qty = Number(row.quantity_on_hand);
+      const rate = Number(ing?.cost_per_unit ?? 0);
+      return {
+        name: ing?.name ?? "Unknown",
+        unit: ing?.unit ?? "UNIT",
+        qty,
+        rate,
+        amount: qty * rate,
+      };
+    });
+
+    total = lineItems.reduce((sum, l) => sum + l.amount, 0);
+  }
 
   // Fetch active invoice DB record if it exists
   const { data: activeInvoice } = await supabase
@@ -73,7 +124,9 @@ export default async function WarehouseInvoicePage({
           <ArrowLeft className="w-4 h-4" />
           Back to Overview
         </Link>
-        <InvoiceActions branchId={id} branchName={branch.name} invoiceId={activeInvoice?.id} />
+        {!historicalInvoiceId ? (
+          <InvoiceActions branchId={id} branchName={branch.name} invoiceId={activeInvoice?.id} />
+        ) : null}
       </div>
 
       {/* Invoice Card - Optimized for Printing */}
@@ -115,9 +168,9 @@ export default async function WarehouseInvoicePage({
             <h2 className="text-3xl font-black text-[#052e36] tracking-tighter">
               {billingEnd.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
             </h2>
-            <p className="text-gray-400 text-xs font-medium">
-              Computation period starts {today.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-            </p>
+            {billingStartLabel ? (
+              <p className="text-gray-400 text-xs font-medium">Computation period starts {billingStartLabel}</p>
+            ) : null}
           </div>
         </div>
 

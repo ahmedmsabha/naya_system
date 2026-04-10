@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { addIngredient } from "@/app/(dashboard)/branch/[id]/warehouse/actions";
 import { PlusCircle, Loader2 } from "lucide-react";
 
@@ -9,6 +10,7 @@ export function AddItemForm({ branchId }: { branchId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -23,6 +25,7 @@ export function AddItemForm({ branchId }: { branchId: string }) {
       } else {
         setSuccess(true);
         formRef.current?.reset();
+        router.refresh();
         setTimeout(() => setSuccess(false), 2000);
       }
     });

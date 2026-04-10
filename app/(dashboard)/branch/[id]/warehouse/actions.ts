@@ -35,6 +35,8 @@ export async function addIngredient(formData: FormData) {
   if (invError) return { error: invError.message };
 
   revalidatePath(`/branch/${branchId}/warehouse`);
+  revalidatePath(`/branch/${branchId}/warehouse/invoice`);
+  revalidatePath(`/branch/${branchId}/warehouse/schedule`);
   return { success: true };
 }
 
@@ -47,7 +49,7 @@ export async function updateQuantity(formData: FormData) {
   // Fetch current quantity
   const { data: inv, error: fetchError } = await supabase
     .from("inventory")
-    .select("quantity_on_hand")
+    .select("quantity_on_hand, ingredient_id")
     .eq("id", inventoryId)
     .single();
 
@@ -62,7 +64,29 @@ export async function updateQuantity(formData: FormData) {
 
   if (error) return { error: error.message };
 
+  // Log PURCHASES into the schedule table (positive deltas only)
+  if (delta > 0) {
+    const today = new Date().toISOString().split("T")[0];
+    const ingredientId = inv.ingredient_id as string;
+    const { data: existing } = await supabase
+      .from("warehouse_distributions")
+      .select("quantity")
+      .eq("branch_id", branchId)
+      .eq("ingredient_id", ingredientId)
+      .eq("distributed_at", today)
+      .maybeSingle();
+
+    const next = Number(existing?.quantity ?? 0) + delta;
+    const { error: distError } = await supabase.from("warehouse_distributions").upsert(
+      { branch_id: branchId, ingredient_id: ingredientId, distributed_at: today, quantity: next },
+      { onConflict: "branch_id,ingredient_id,distributed_at" }
+    );
+    if (distError) return { error: distError.message };
+  }
+
   revalidatePath(`/branch/${branchId}/warehouse`);
+  revalidatePath(`/branch/${branchId}/warehouse/invoice`);
+  revalidatePath(`/branch/${branchId}/warehouse/schedule`);
   return { success: true };
 }
 
@@ -72,6 +96,16 @@ export async function setQuantity(formData: FormData) {
   const branchId = formData.get("branch_id") as string;
   const quantity = Math.max(0, parseFloat(formData.get("quantity") as string) || 0);
 
+  // Fetch current to compute delta (so we can log purchases by day)
+  const { data: inv, error: fetchError } = await supabase
+    .from("inventory")
+    .select("quantity_on_hand, ingredient_id")
+    .eq("id", inventoryId)
+    .single();
+  if (fetchError || !inv) return { error: "Inventory record not found" };
+
+  const delta = quantity - Number(inv.quantity_on_hand);
+
   const { error } = await supabase
     .from("inventory")
     .update({ quantity_on_hand: quantity, counted_at: new Date().toISOString().split("T")[0] })
@@ -79,7 +113,43 @@ export async function setQuantity(formData: FormData) {
 
   if (error) return { error: error.message };
 
+  // Log PURCHASES into the schedule table (positive deltas only)
+  if (delta > 0) {
+    const today = new Date().toISOString().split("T")[0];
+    const ingredientId = inv.ingredient_id as string;
+    const { data: existing } = await supabase
+      .from("warehouse_distributions")
+      .select("quantity")
+      .eq("branch_id", branchId)
+      .eq("ingredient_id", ingredientId)
+      .eq("distributed_at", today)
+      .maybeSingle();
+
+    const next = Number(existing?.quantity ?? 0) + delta;
+    const { error: distError } = await supabase.from("warehouse_distributions").upsert(
+      { branch_id: branchId, ingredient_id: ingredientId, distributed_at: today, quantity: next },
+      { onConflict: "branch_id,ingredient_id,distributed_at" }
+    );
+    if (distError) return { error: distError.message };
+  }
+
   revalidatePath(`/branch/${branchId}/warehouse`);
+  revalidatePath(`/branch/${branchId}/warehouse/invoice`);
+  revalidatePath(`/branch/${branchId}/warehouse/schedule`);
+  return { success: true };
+}
+
+export async function deleteInventoryItem(formData: FormData) {
+  const supabase = await createClient();
+  const inventoryId = formData.get("inventory_id") as string;
+  const branchId = formData.get("branch_id") as string;
+
+  const { error } = await supabase.from("inventory").delete().eq("id", inventoryId).eq("branch_id", branchId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/branch/${branchId}/warehouse`);
+  revalidatePath(`/branch/${branchId}/warehouse/invoice`);
+  revalidatePath(`/branch/${branchId}/warehouse/schedule`);
   return { success: true };
 }
 
@@ -148,7 +218,7 @@ export async function archiveInvoice(formData: FormData) {
       // 1. Calculate total valuation
       const { data: items } = await supabase
         .from("inventory")
-        .select(`quantity_on_hand, ingredients ( cost_per_unit )`)
+        .select(`ingredient_id, quantity_on_hand, ingredients ( cost_per_unit )`)
         .eq("branch_id", branchId)
         .gt("quantity_on_hand", 0);
 
@@ -180,6 +250,33 @@ export async function archiveInvoice(formData: FormData) {
 
       if (createError) throw new Error(createError.message);
       invoiceId = newInvoice.id;
+
+      // 4. Persist invoice line items for archive + historical review
+      const lineRows =
+        (items ?? [])
+          .map((row) => {
+            const ing = Array.isArray(row.ingredients) ? row.ingredients[0] : row.ingredients;
+            const qty = Number(row.quantity_on_hand);
+            const unitCost = Number(ing?.cost_per_unit ?? 0);
+            if (!row.ingredient_id || qty <= 0) return null;
+            return {
+              invoice_id: newInvoice.id,
+              ingredient_id: row.ingredient_id,
+              quantity: qty,
+              unit_cost: unitCost,
+            };
+          })
+          .filter(Boolean) as Array<{
+          invoice_id: string;
+          ingredient_id: string;
+          quantity: number;
+          unit_cost: number;
+        }>;
+
+      if (lineRows.length) {
+        const { error: itemsError } = await supabase.from("warehouse_invoice_items").insert(lineRows);
+        if (itemsError) throw new Error(itemsError.message);
+      }
     } else {
       // Update existing record to archived
       const { error } = await supabase
@@ -190,8 +287,18 @@ export async function archiveInvoice(formData: FormData) {
       if (error) throw new Error(error.message);
     }
 
+    // After archiving, reset branch inventory quantities to 0
+    // so the next invoice starts from a clean slate.
+    const { error: resetError } = await supabase
+      .from("inventory")
+      .update({ quantity_on_hand: 0, counted_at: new Date().toISOString().split("T")[0] })
+      .eq("branch_id", branchId);
+    if (resetError) throw new Error(resetError.message);
+
+    revalidatePath(`/branch/${branchId}/warehouse`);
     revalidatePath(`/branch/${branchId}/warehouse/invoice`);
     revalidatePath(`/branch/${branchId}/warehouse/archive`);
+    revalidatePath(`/branch/${branchId}/warehouse/schedule`);
   } catch (error) {
     console.error("Archive Error:", error);
     return { error: error instanceof Error ? error.message : "Unknown archive failure" };

@@ -5,6 +5,24 @@ import { ArrowLeft, Calendar } from "lucide-react";
 import { AddItemForm } from "@/components/warehouse/AddItemForm";
 import { InventoryView } from "@/components/warehouse/InventoryView";
 
+export const dynamic = "force-dynamic";
+
+function getCurrentWeekDates(): Record<string, string> {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon...
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+
+  const days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+  const result: Record<string, string> = {};
+  days.forEach((day, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    result[day] = d.toISOString().split("T")[0];
+  });
+  return result;
+}
+
 export default async function WarehouseMainPage({
   params,
 }: {
@@ -47,6 +65,21 @@ export default async function WarehouseMainPage({
     };
   });
 
+  // Pull current-week distributions so Overview can show per-day details
+  const weekDates = getCurrentWeekDates();
+  const weekValues = Object.values(weekDates);
+  const { data: distributions } = await supabase
+    .from("warehouse_distributions")
+    .select("ingredient_id, quantity, distributed_at")
+    .eq("branch_id", id)
+    .in("distributed_at", weekValues);
+
+  const distributionsByIngredient: Record<string, Record<string, number>> = {};
+  (distributions ?? []).forEach((d) => {
+    if (!distributionsByIngredient[d.ingredient_id]) distributionsByIngredient[d.ingredient_id] = {};
+    distributionsByIngredient[d.ingredient_id][d.distributed_at] = Number(d.quantity);
+  });
+
   // Fetch total invoices for the badge
   const { count: invoicesCount } = await supabase
     .from("warehouse_invoices")
@@ -57,7 +90,6 @@ export default async function WarehouseMainPage({
   const today = new Date();
 
   // Compute total value
-  const totalItemsCount = items.length;
   const totalValue = items.reduce((acc, i) => acc + i.total_value, 0);
 
   return (
@@ -113,7 +145,12 @@ export default async function WarehouseMainPage({
       <div className="flex flex-col lg:flex-row gap-10 items-start mt-4">
         {/* Inventory view (headers & grid) */}
         <div className="flex-1 min-w-0 w-full">
-          <InventoryView items={items} branchId={id} totalItems={totalItemsCount} />
+          <InventoryView
+            items={items}
+            branchId={id}
+            weekDates={weekDates}
+            distributionsByIngredient={distributionsByIngredient}
+          />
         </div>
 
         {/* Add item form sidebar */}

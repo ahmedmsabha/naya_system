@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { ScheduleTable } from "@/components/warehouse/ScheduleTable";
 
+export const dynamic = "force-dynamic";
+
 // Build the current week's dates (Mon → Sun)
 function getCurrentWeekDates(): Record<string, string> {
   const today = new Date();
