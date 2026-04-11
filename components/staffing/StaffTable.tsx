@@ -2,51 +2,102 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { deleteStaff, updateStaff } from "@/app/(dashboard)/branch/[id]/staffing/actions";
-import { BadgeCheck, MoreVertical, Pencil, Star, Trash2, X } from "lucide-react";
+import { deleteStaff, toggleStaffAdpStatus, upsertStaffingSnapshot } from "@/app/(dashboard)/branch/[id]/staffing/actions";
+import { StarRating } from "@/components/staffing/StarRating";
+import { BadgeCheck, Loader2, Pencil, Trash2 } from "lucide-react";
+import { formatNumberEn } from "@/lib/format/en";
 
-export type StaffRow = {
+export type EmployeeStatic = {
   id: string;
   full_name: string;
   email: string | null;
   phone: string | null;
   employee_code: string | null;
   adp_status: string;
-  base_salary: number;
-  salary_period: string;
-  salary_p1?: number | null;
-  salary_p2?: number | null;
-  salary_p3?: number | null;
-  salary_p4?: number | null;
-  performance_rating: number;
 };
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const a = parts[0]?.[0] ?? "N";
-  const b = parts[1]?.[0] ?? "";
-  return (a + b).toUpperCase();
+export type StaffingRecord = {
+  role: string;
+  salaryP1: number;
+  salaryP2: number;
+  performanceRating: number;
+  shift: string;
+  hoursPerWeek: number;
+  status: "active" | "on-leave" | "terminated";
+  notes: string;
+};
+
+function fallbackRecord(): StaffingRecord {
+  return {
+    role: "crew",
+    salaryP1: 0,
+    salaryP2: 0,
+    performanceRating: 0,
+    shift: "full",
+    hoursPerWeek: 40,
+    status: "active",
+    notes: "",
+  };
 }
 
-export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: string }) {
+function diffLabel(curr: StaffingRecord | null, prev: StaffingRecord | null): string | null {
+  if (!curr || !prev) return null;
+  const currTotal = curr.salaryP1 + curr.salaryP2;
+  const prevTotal = prev.salaryP1 + prev.salaryP2;
+  if (currTotal !== prevTotal) {
+    const arrow = currTotal > prevTotal ? "↑" : "↓";
+    return `Salary ${prevTotal} → ${currTotal} ${arrow}`;
+  }
+  if (curr.salaryP1 !== prev.salaryP1 || curr.salaryP2 !== prev.salaryP2) {
+    return "Salary split changed";
+  }
+  if (curr.performanceRating !== prev.performanceRating) {
+    return `Rating ${prev.performanceRating} → ${curr.performanceRating}`;
+  }
+  if (curr.role !== prev.role) return `Role ${prev.role} → ${curr.role}`;
+  if (curr.shift !== prev.shift) return `Shift ${prev.shift} → ${curr.shift}`;
+  if (curr.status !== prev.status) return `Status ${prev.status} → ${curr.status}`;
+  if (curr.hoursPerWeek !== prev.hoursPerWeek) return `Hours ${prev.hoursPerWeek} → ${curr.hoursPerWeek}`;
+  if ((curr.notes || "") !== (prev.notes || "")) return "Notes updated";
+  return null;
+}
+
+export function StaffTable({
+  branchId,
+  employees,
+  selectedPeriod,
+  isHistorical,
+  selectedSnapshot,
+  previousSnapshot,
+}: {
+  branchId: string;
+  employees: EmployeeStatic[];
+  selectedPeriod: string;
+  isHistorical: boolean;
+  selectedSnapshot: Record<string, StaffingRecord>;
+  previousSnapshot: Record<string, StaffingRecord>;
+}) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [isPeriodPending, startPeriodTransition] = useTransition();
   const [editId, setEditId] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [isSaving, startSaveTransition] = useTransition();
+  const [togglingAdpId, setTogglingAdpId] = useState<string | null>(null);
+  const [allowHistorical, setAllowHistorical] = useState(false);
 
   const staffById = useMemo(() => {
-    const m = new Map<string, StaffRow>();
-    rows.forEach((r) => m.set(r.id, r));
+    const m = new Map<string, EmployeeStatic>();
+    employees.forEach((r) => m.set(r.id, r));
     return m;
-  }, [rows]);
+  }, [employees]);
 
-  const editing = editId ? staffById.get(editId) ?? null : null;
+  const editingEmployee = editId ? staffById.get(editId) ?? null : null;
+  const editingRecord = editId ? selectedSnapshot[editId] ?? fallbackRecord() : null;
 
-  const filtered = rows.filter((r) => {
+  const filtered = employees.filter((r) => {
     const hay = `${r.full_name} ${r.email ?? ""} ${r.phone ?? ""} ${r.employee_code ?? ""}`.toLowerCase();
     return hay.includes(q.toLowerCase());
   });
@@ -66,20 +117,43 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
     });
   };
 
+  const onToggleAdp = (staffId: string) => {
+    setTogglingAdpId(staffId);
+    const fd = new FormData();
+    fd.set("branch_id", branchId);
+    fd.set("staff_id", staffId);
+    startTransition(async () => {
+      const res = await toggleStaffAdpStatus(fd);
+      if (res?.error) alert(res.error);
+      setTogglingAdpId(null);
+      router.refresh();
+    });
+  };
+
   const closeEdit = () => {
     setEditId(null);
     setEditError(null);
+    setAllowHistorical(false);
   };
 
   const onSave = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!editing) return;
+    if (!editingEmployee) return;
+    if (isHistorical && !allowHistorical) {
+      const ok = window.confirm(
+        `You are editing historical period ${selectedPeriod}. Continue?`
+      );
+      if (!ok) return;
+      setAllowHistorical(true);
+    }
     const fd = new FormData(e.currentTarget);
     fd.set("branch_id", branchId);
-    fd.set("staff_id", editing.id);
+    fd.set("staff_id", editingEmployee.id);
+    fd.set("selected_period", selectedPeriod);
+    if (isHistorical) fd.set("allow_historical", "1");
     startSaveTransition(async () => {
       setEditError(null);
-      const res = await updateStaff(fd);
+      const res = await upsertStaffingSnapshot(fd);
       if (res?.error) return setEditError(res.error);
       router.refresh();
       closeEdit();
@@ -89,6 +163,23 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
   return (
     <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden" dir="ltr">
       <div className="p-5 border-b border-gray-50 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Period</label>
+          <input
+            type="month"
+            value={selectedPeriod}
+            disabled={isPeriodPending}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (!next) return;
+              startPeriodTransition(() => {
+                router.push(`/branch/${branchId}/staffing?period=${next}`);
+              });
+            }}
+            className="rounded-2xl border border-gray-100 bg-gray-50/40 px-4 py-3 text-sm font-bold text-[#052e36]"
+          />
+          {isPeriodPending ? <Loader2 className="w-4 h-4 animate-spin text-[#2563eb]" /> : null}
+        </div>
         <div className="relative flex-1 min-w-[260px]">
           <input
             value={q}
@@ -102,6 +193,12 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
         </div>
       </div>
 
+      {isHistorical ? (
+        <div className="mx-5 mt-5 rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-[12px] font-bold text-yellow-800">
+          Historical view: {selectedPeriod}. Editing requires confirmation.
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -110,30 +207,25 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
               <th className="py-4 px-4 text-center">ADP</th>
               <th className="py-4 px-4 text-center">Contact</th>
               <th className="py-4 px-4 text-center">Performance</th>
-              <th className="py-4 px-4 text-center">Salary</th>
+              <th className="py-4 px-4 text-center">Salary (half split)</th>
+              <th className="py-4 px-4 text-center">Diff vs prev</th>
               <th className="py-4 px-4 text-right">Action</th>
             </tr>
           </thead>
 
           <tbody>
             {filtered.map((r) => {
+              const current = selectedSnapshot[r.id] ?? null;
+              const prev = previousSnapshot[r.id] ?? null;
+              const effective = current ?? fallbackRecord();
+              const diff = diffLabel(current, prev);
               const isConnected = r.adp_status === "connected";
               const isPending = pendingId === r.id;
-              const period = (r.salary_period || "monthly").toLowerCase();
-              const semiMonthly = period === "semi_monthly" || period === "semimonthly";
-              const quarterly = period === "quarterly";
-              const p1 = Number(r.salary_p1 ?? 0) || 0;
-              const p2 = Number(r.salary_p2 ?? 0) || 0;
-              const p3 = Number(r.salary_p3 ?? 0) || 0;
-              const p4 = Number(r.salary_p4 ?? 0) || 0;
-              const monthlyTotal = Number(r.base_salary ?? 0) || (semiMonthly ? p1 + p2 : quarterly ? p1 + p2 + p3 + p4 : 0);
+              const total = effective.salaryP1 + effective.salaryP2;
               return (
                 <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-colors">
                   <td className="py-7 px-6">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-[#f4f7fe] border border-blue-100 flex items-center justify-center font-black text-[#2563eb]">
-                        {initials(r.full_name)}
-                      </div>
                       <div className="min-w-0">
                         <div className="font-black text-[#052e36] truncate">{r.full_name}</div>
                         <div className="text-[11px] font-bold text-gray-400 mt-1">
@@ -144,67 +236,59 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
                   </td>
 
                   <td className="py-7 px-4 text-center">
-                    <div className="inline-flex items-center gap-2 text-[11px] font-black">
-                      {isConnected ? (
-                        <>
-                          <BadgeCheck className="w-4 h-4 text-[#10b981]" />
-                          <span className="text-[#10b981]">Connected</span>
-                        </>
-                      ) : (
-                        <span className="text-gray-300">Not connected</span>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      disabled={togglingAdpId === r.id}
+                      onClick={() => onToggleAdp(r.id)}
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1 text-[11px] font-black transition-colors ${
+                        isConnected
+                          ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                    >
+                      {togglingAdpId === r.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isConnected ? (
+                        <BadgeCheck className="w-4 h-4" />
+                      ) : null}
+                      {isConnected ? "ADP connected" : "Not connected"}
+                    </button>
                   </td>
-
                   <td className="py-7 px-4 text-center text-[12px] font-bold text-gray-500">
                     <div className="flex flex-col gap-1">
                       <span className="truncate max-w-[220px] mx-auto">{r.email ?? "—"}</span>
-                      <span className="text-gray-300 text-[11px]">{r.phone ?? ""}</span>
+                      <span className="text-gray-300 text-[11px]">{r.phone ?? "—"}</span>
                     </div>
                   </td>
-
                   <td className="py-7 px-4 text-center">
-                    <div className="inline-flex items-center gap-2">
-                      <Star className="w-4 h-4 text-[#f59e0b]" />
-                      <span className="font-black text-[#052e36]">{Number(r.performance_rating || 0).toFixed(2)}</span>
+                    <div className="inline-flex flex-col items-center gap-1">
+                      <StarRating rating={effective.performanceRating} size={16} />
+                      <span className="text-[10px] font-black text-gray-400">
+                        {effective.performanceRating.toFixed(1)}
+                      </span>
                     </div>
                   </td>
-
                   <td className="py-7 px-4 text-center">
-                    {semiMonthly ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="font-black text-[#052e36]">${p1.toLocaleString()}</div>
-                        <div className="font-black text-[#052e36]">${p2.toLocaleString()}</div>
-                        <div className="mt-1 rounded-xl bg-[#052e36] text-white px-4 py-1.5 text-[11px] font-black tracking-widest">
-                          TOTAL: ${Number(monthlyTotal ?? 0).toLocaleString()}
-                        </div>
-                        <div className="text-[10px] font-black text-gray-300 tracking-widest uppercase mt-1">semi-monthly</div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="font-black text-[#052e36]">${formatNumberEn(effective.salaryP1)}</div>
+                      <div className="font-black text-[#052e36]">${formatNumberEn(effective.salaryP2)}</div>
+                      <div className="mt-1 rounded-xl bg-[#052e36] text-white px-4 py-1.5 text-[11px] font-black tracking-widest">
+                        TOTAL: ${formatNumberEn(total)}
                       </div>
-                    ) : quarterly ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm font-black text-[#052e36]">
-                          <span>${p1.toLocaleString()}</span>
-                          <span>${p2.toLocaleString()}</span>
-                          <span>${p3.toLocaleString()}</span>
-                          <span>${p4.toLocaleString()}</span>
-                        </div>
-                        <div className="mt-1 rounded-xl bg-[#052e36] text-white px-4 py-1.5 text-[11px] font-black tracking-widest">
-                          TOTAL: ${Number(monthlyTotal ?? 0).toLocaleString()}
-                        </div>
-                        <div className="text-[10px] font-black text-gray-300 tracking-widest uppercase mt-1">quarterly</div>
-                      </div>
+                    </div>
+                  </td>
+                  <td className="py-7 px-4 text-center">
+                    {diff ? (
+                      <span className="inline-flex rounded-xl bg-[#eef5fe] text-[#2563eb] px-3 py-1 text-[10px] font-black">
+                        {diff}
+                      </span>
                     ) : (
-                      <>
-                        <div className="font-black text-[#052e36]">${Number(r.base_salary || 0).toLocaleString()}</div>
-                        <div className="text-[10px] font-black text-gray-300 tracking-widest uppercase mt-1">
-                          {r.salary_period}
-                        </div>
-                      </>
+                      <span className="text-[10px] font-black text-gray-300">No change</span>
                     )}
                   </td>
 
                   <td className="py-7 px-4 text-left">
-                    <div className="flex items-center justify-end gap-2 relative">
+                    <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
                         disabled={isPending}
@@ -217,37 +301,13 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
                       </button>
                       <button
                         type="button"
-                        onClick={() => setOpenMenuId((cur) => (cur === r.id ? null : r.id))}
+                        onClick={() => setEditId(r.id)}
                         className="w-10 h-10 rounded-2xl border border-gray-100 bg-white hover:bg-gray-50 text-gray-400 hover:text-gray-600 flex items-center justify-center transition-colors"
-                        title="More"
-                        aria-label="More"
+                        title="Edit"
+                        aria-label="Edit"
                       >
-                        <MoreVertical className="w-4 h-4" />
+                        <Pencil className="w-4 h-4" />
                       </button>
-
-                      {openMenuId === r.id ? (
-                        <div className="absolute right-0 top-12 w-44 rounded-2xl border border-gray-100 bg-white shadow-xl overflow-hidden z-10">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenMenuId(null);
-                              setEditId(r.id);
-                            }}
-                            className="w-full px-4 py-3 text-left text-sm font-black text-[#052e36] hover:bg-gray-50 flex items-center gap-2"
-                          >
-                            <Pencil className="w-4 h-4 text-gray-400" />
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setOpenMenuId(null)}
-                            className="w-full px-4 py-3 text-left text-sm font-black text-gray-400 hover:bg-gray-50 flex items-center gap-2"
-                          >
-                            <X className="w-4 h-4" />
-                            Close
-                          </button>
-                        </div>
-                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -256,7 +316,7 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
 
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-14 text-center text-gray-400 font-bold">
+                <td colSpan={7} className="py-14 text-center text-gray-400 font-bold">
                   No employees match your search
                 </td>
               </tr>
@@ -265,15 +325,17 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
         </table>
       </div>
 
-      {editing ? (
+      {editingEmployee && editingRecord ? (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/30" onClick={closeEdit} />
           <div className="absolute inset-x-0 top-16 mx-auto max-w-2xl px-4">
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
               <div className="p-7 border-b border-gray-50 flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-lg font-black text-[#052e36]">Edit staff</div>
-                  <div className="text-[11px] font-bold text-gray-400 mt-1">{editing.full_name}</div>
+                  <div className="text-lg font-black text-[#052e36]">Edit snapshot</div>
+                  <div className="text-[11px] font-bold text-gray-400 mt-1">
+                    {editingEmployee.full_name} · {selectedPeriod}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -291,130 +353,50 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
                   </div>
                 ) : null}
 
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Full name</label>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">First half</label>
                   <input
-                    name="full_name"
-                    defaultValue={editing.full_name}
-                    required
+                    name="salary_p1"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={editingRecord.salaryP1}
                     className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Email</label>
+                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Second half</label>
                   <input
-                    name="email"
-                    type="email"
-                    defaultValue={editing.email ?? ""}
+                    name="salary_p2"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={editingRecord.salaryP2}
                     className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
                   />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Phone</label>
-                  <input
-                    name="phone"
-                    defaultValue={editing.phone ?? ""}
-                    className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Employee ID</label>
-                  <input
-                    name="employee_code"
-                    defaultValue={editing.employee_code ?? ""}
-                    className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">ADP</label>
-                  <select
-                    name="adp_status"
-                    defaultValue={editing.adp_status ?? "not_connected"}
-                    className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                  >
-                    <option value="connected">Connected</option>
-                    <option value="not_connected">Not connected</option>
-                  </select>
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Salary</label>
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input
-                      name="salary_p1"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={String(Number(editing.salary_p1 ?? 0) || 0)}
-                      placeholder="Part #1"
-                      className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                    />
-                    <input
-                      name="salary_p2"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={String(Number(editing.salary_p2 ?? 0) || 0)}
-                      placeholder="Part #2"
-                      className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                    />
-                    <input
-                      name="salary_p3"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={String(Number(editing.salary_p3 ?? 0) || 0)}
-                      placeholder="Part #3"
-                      className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                    />
-                    <input
-                      name="salary_p4"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={String(Number(editing.salary_p4 ?? 0) || 0)}
-                      placeholder="Part #4"
-                      className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                    />
-                  </div>
-                  <input type="hidden" name="base_salary" value={String(Number(editing.base_salary ?? 0) || 0)} />
-                  <div className="mt-2 text-[11px] font-bold text-gray-400">
-                    Leave any part empty to count as 0. Semi-monthly uses Part #1 + Part #2. Quarterly uses Part #1–#4.
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Period</label>
-                  <select
-                    name="salary_period"
-                    defaultValue={editing.salary_period ?? "monthly"}
-                    className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                  >
-                    <option value="hourly">Hourly</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Biweekly</option>
-                    <option value="semi_monthly">Semi-monthly</option>
-                    <option value="quarterly">Quarterly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Rating (0-5)</label>
+                  <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">
+                    Performance rating (fractional)
+                  </label>
                   <input
                     name="performance_rating"
                     type="number"
-                    step="0.01"
+                    step="0.5"
                     min="0"
                     max="5"
-                    defaultValue={String(editing.performance_rating ?? 0)}
+                    defaultValue={editingRecord.performanceRating}
                     className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
                   />
                 </div>
+
+                <input type="hidden" name="role" value={editingRecord.role} />
+                <input type="hidden" name="shift" value={editingRecord.shift} />
+                <input type="hidden" name="hours_per_week" value={String(editingRecord.hoursPerWeek)} />
+                <input type="hidden" name="status" value={editingRecord.status} />
+                <input type="hidden" name="notes" value={editingRecord.notes} />
 
                 <div className="sm:col-span-2 flex items-center justify-end gap-3 mt-2">
                   <button type="button" onClick={closeEdit} className="rounded-2xl px-5 py-3 text-sm font-black text-gray-500 hover:bg-gray-50">
@@ -425,7 +407,7 @@ export function StaffTable({ rows, branchId }: { rows: StaffRow[]; branchId: str
                     disabled={isSaving}
                     className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-2xl px-6 py-3 text-sm font-black shadow-lg shadow-blue-200/30 disabled:opacity-60"
                   >
-                    {isSaving ? "..." : "Save changes"}
+                    {isSaving ? "..." : `Save ${selectedPeriod}`}
                   </button>
                 </div>
               </form>

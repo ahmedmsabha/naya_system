@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Calendar, FileText, ExternalLink } from "lucide-react";
 import { DeleteArchiveButton } from "@/components/warehouse/DeleteArchiveButton";
+import { formatNumberEn } from "@/lib/format/en";
 
 export const dynamic = "force-dynamic";
 
@@ -80,7 +81,7 @@ export default async function WarehouseArchivePage({
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Total Valuation</span>
                         <span className="text-5xl font-black text-[#052e36] tracking-tighter">
-                          ${Number(inv.total_amount).toLocaleString(undefined, { minimumFractionDigits: 1 })}
+                          ${formatNumberEn(Number(inv.total_amount), { minimumFractionDigits: 1 })}
                         </span>
                       </div>
                       

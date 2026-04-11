@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { 
   Plus, 
-  Trash2, 
   Trash, 
   Scan, 
   FileText, 
@@ -14,6 +13,7 @@ import {
   Eye
 } from "lucide-react";
 import { deleteAccountantInvoice, addAccountantInvoice, uploadReceipt } from "@/app/(dashboard)/accountant/actions";
+import { formatDateEn, formatNumberEn } from "@/lib/format/en";
 
 interface Invoice {
   id: string;
@@ -32,16 +32,41 @@ export function TarekAccountant({
   stats: { total: number; project: number; other: number } 
 }) {
   const [invoices, setInvoices] = useState(initialInvoices);
+  const [projectFilter, setProjectFilter] = useState<string>("all");
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+
+  const projectOptions = useMemo(() => {
+    const uniq = Array.from(new Set(invoices.map((i) => i.project_name).filter(Boolean)));
+    return uniq.sort((a, b) => a.localeCompare(b));
+  }, [invoices]);
+
+  const filteredInvoices = useMemo(() => {
+    if (projectFilter === "all") return invoices;
+    return invoices.filter((inv) => inv.project_name === projectFilter);
+  }, [invoices, projectFilter]);
+
+  const statsView = useMemo(() => {
+    const source = filteredInvoices;
+    const totalAmount = source.length
+      ? source.reduce((sum, inv) => sum + Number(inv.amount || 0), 0)
+      : stats.total;
+    const projectAmount = source.length
+      ? source
+          .filter((inv) => inv.project_name?.toLowerCase().includes("manassas"))
+          .reduce((sum, inv) => sum + Number(inv.amount || 0), 0)
+      : stats.project;
+    const otherAmount = Math.max(0, totalAmount - projectAmount);
+    return { total: totalAmount, project: projectAmount, other: otherAmount };
+  }, [filteredInvoices, stats]);
 
   // Pie chart calculation
-  const total = stats.total || 1;
-  const projectPercentage = (stats.project / total) * 100;
+  const total = statsView.total || 1;
+  const projectPercentage = (statsView.project / total) * 100;
   const otherPercentage = 100 - projectPercentage;
 
-  const handleDelete = (id: string, branchId?: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm("Are you sure you want to delete this invoice?")) return;
     startTransition(async () => {
       await deleteAccountantInvoice(id);
@@ -76,7 +101,7 @@ export function TarekAccountant({
                 <FileText className="w-16 h-16" />
              </div>
              <p className="text-[10px] font-black tracking-widest uppercase opacity-60 mb-1">Total Budget Spent</p>
-             <h4 className="text-4xl font-black tracking-tighter">${stats.total.toLocaleString()}</h4>
+             <h4 className="text-4xl font-black tracking-tighter">${formatNumberEn(statsView.total)}</h4>
            </div>
 
            {/* Manassas Project */}
@@ -85,7 +110,7 @@ export function TarekAccountant({
                 <Target className="w-16 h-16" />
              </div>
              <p className="text-[10px] font-black tracking-widest uppercase text-gray-400 mb-1">Manassas Project</p>
-             <h4 className="text-3xl font-black text-[#10b981] tracking-tighter">${stats.project.toLocaleString()}</h4>
+             <h4 className="text-3xl font-black text-[#10b981] tracking-tighter">${formatNumberEn(statsView.project)}</h4>
              <div className="w-1/2 h-1 bg-[#10b981]/20 rounded-full mt-2 overflow-hidden">
                 <div 
                   className="h-full bg-[#10b981] transition-all duration-1000" 
@@ -100,7 +125,7 @@ export function TarekAccountant({
                 <BarChart3 className="w-16 h-16" />
              </div>
              <p className="text-[10px] font-black tracking-widest uppercase text-gray-400 mb-1">Other Expenses</p>
-             <h4 className="text-3xl font-black text-[#f59e0b] tracking-tighter">${stats.other.toLocaleString()}</h4>
+             <h4 className="text-3xl font-black text-[#f59e0b] tracking-tighter">${formatNumberEn(statsView.other)}</h4>
              <div className="w-1/2 h-1 bg-[#f59e0b]/20 rounded-full mt-2 overflow-hidden">
                 <div 
                   className="h-full bg-[#f59e0b] transition-all duration-1000" 
@@ -149,14 +174,14 @@ export function TarekAccountant({
                 <div className="w-3 h-3 bg-[#6366f1] rounded-full" />
                 <span className="text-xs font-black text-[#052e36]">Manassas Project</span>
               </div>
-              <span className="text-xs font-black text-[#052e36]">${stats.project.toLocaleString()}</span>
+              <span className="text-xs font-black text-[#052e36]">${formatNumberEn(statsView.project)}</span>
             </div>
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 bg-[#10b981] rounded-full" />
                 <span className="text-xs font-black text-[#052e36]">Other Expenses</span>
               </div>
-              <span className="text-xs font-black text-[#052e36]">${stats.other.toLocaleString()}</span>
+              <span className="text-xs font-black text-[#052e36]">${formatNumberEn(statsView.other)}</span>
             </div>
           </div>
         </div>
@@ -168,10 +193,17 @@ export function TarekAccountant({
                <h3 className="font-black text-[#052e36] uppercase tracking-tighter">Financial Ledger</h3>
                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Recent Invoice Activity</p>
              </div>
-             <select className="bg-gray-50 border-none rounded-xl text-xs font-bold px-4 py-2 focus:ring-0">
-               <option>All Projects</option>
-               <option>Manassas</option>
-               <option>General</option>
+             <select
+               value={projectFilter}
+               onChange={(e) => setProjectFilter(e.target.value)}
+               className="bg-gray-50 border-none rounded-xl text-xs font-bold px-4 py-2 focus:ring-0"
+             >
+               <option value="all">All Projects</option>
+               {projectOptions.map((name) => (
+                 <option key={name} value={name}>
+                   {name}
+                 </option>
+               ))}
              </select>
           </div>
 
@@ -187,12 +219,12 @@ export function TarekAccountant({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {invoices.length === 0 ? (
+                {filteredInvoices.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-20 text-center text-gray-300 font-bold uppercase tracking-widest text-sm">No recorded invoices</td>
                   </tr>
                 ) : (
-                  invoices.map((inv) => (
+                  filteredInvoices.map((inv) => (
                     <tr key={inv.id} className="group hover:bg-gray-50/50 transition-colors">
                       <td className="py-6">
                         <div className="flex items-center gap-4">
@@ -201,7 +233,7 @@ export function TarekAccountant({
                           </div>
                           <div>
                             <p className="font-black text-[#052e36] text-sm leading-tight">{inv.vendor_name}</p>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase mt-0.5">{new Date(inv.created_at).toLocaleDateString()}</p>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase mt-0.5">{formatDateEn(inv.created_at)}</p>
                           </div>
                         </div>
                       </td>
@@ -215,7 +247,7 @@ export function TarekAccountant({
                         </span>
                       </td>
                       <td className="py-6 text-right font-black text-[#052e36] text-sm">
-                        ${Number(inv.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        ${formatNumberEn(Number(inv.amount), { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-6 text-center">
                         {inv.image_url ? (

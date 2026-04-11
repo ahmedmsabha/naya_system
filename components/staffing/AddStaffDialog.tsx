@@ -5,13 +5,12 @@ import { useRouter } from "next/navigation";
 import { Plus, UsersRound, Wand2, Upload } from "lucide-react";
 import { addStaff, bulkAddStaff } from "@/app/(dashboard)/branch/[id]/staffing/actions";
 
-export function AddStaffDialog({ branchId }: { branchId: string }) {
+export function AddStaffDialog({ branchId, selectedPeriod }: { branchId: string; selectedPeriod: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"smart" | "manual" | "bulk">("smart");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [manualPeriod, setManualPeriod] = useState<string>("monthly");
 
   const smartRef = useRef<HTMLInputElement>(null);
   const manualRef = useRef<HTMLFormElement>(null);
@@ -25,7 +24,6 @@ export function AddStaffDialog({ branchId }: { branchId: string }) {
   const close = () => {
     setOpen(false);
     setError(null);
-    setManualPeriod("monthly");
   };
 
   const parseSmart = (text: string) => {
@@ -44,8 +42,9 @@ export function AddStaffDialog({ branchId }: { branchId: string }) {
     fd.set("branch_id", branchId);
     fd.set("full_name", parsed.full_name);
     fd.set("email", parsed.email);
+    fd.set("salary", parsed.base_salary);
     fd.set("base_salary", parsed.base_salary);
-    fd.set("salary_period", "monthly");
+    fd.set("selected_period", selectedPeriod);
     startTransition(async () => {
       setError(null);
       const res = await addStaff(fd);
@@ -60,6 +59,7 @@ export function AddStaffDialog({ branchId }: { branchId: string }) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     fd.set("branch_id", branchId);
+    fd.set("selected_period", selectedPeriod);
     startTransition(async () => {
       setError(null);
       const res = await addStaff(fd);
@@ -75,6 +75,7 @@ export function AddStaffDialog({ branchId }: { branchId: string }) {
     const fd = new FormData();
     fd.set("branch_id", branchId);
     fd.set("raw", raw);
+    fd.set("selected_period", selectedPeriod);
     startTransition(async () => {
       setError(null);
       const res = await bulkAddStaff(fd);
@@ -177,7 +178,7 @@ export function AddStaffDialog({ branchId }: { branchId: string }) {
                     />
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="text-[11px] text-gray-400 font-medium">
-                        Type: name, email, salary
+                        Type: name, email, first-half salary
                       </div>
                       <button
                         type="button"
@@ -222,94 +223,27 @@ export function AddStaffDialog({ branchId }: { branchId: string }) {
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Salary</label>
-                      {manualPeriod === "semi_monthly" ? (
-                        <div className="mt-2 grid grid-cols-2 gap-3">
-                          <input
-                            name="salary_p1"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            defaultValue="0"
-                            placeholder="Half #1"
-                            className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                          />
-                          <input
-                            name="salary_p2"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            defaultValue="0"
-                            placeholder="Half #2"
-                            className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                          />
-                        </div>
-                      ) : manualPeriod === "quarterly" ? (
-                        <div className="mt-2 grid grid-cols-2 gap-3">
-                          <input
-                            name="salary_p1"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            defaultValue="0"
-                            placeholder="Quarter #1"
-                            className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                          />
-                          <input
-                            name="salary_p2"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            defaultValue="0"
-                            placeholder="Quarter #2"
-                            className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                          />
-                          <input
-                            name="salary_p3"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            defaultValue="0"
-                            placeholder="Quarter #3"
-                            className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                          />
-                          <input
-                            name="salary_p4"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            defaultValue="0"
-                            placeholder="Quarter #4"
-                            className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                          />
-                        </div>
-                      ) : (
-                        <input
-                          name="base_salary"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          defaultValue="0"
-                          className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                        />
-                      )}
+                      <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">First half</label>
+                      <input
+                        name="salary_p1"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue="0"
+                        className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
+                      />
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Period</label>
-                      <select
-                        name="salary_period"
-                        value={manualPeriod}
-                        onChange={(e) => setManualPeriod(e.target.value)}
+                      <label className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Second half</label>
+                      <input
+                        name="salary_p2"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue="0"
                         className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
-                      >
-                        <option value="hourly">Hourly</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="biweekly">Biweekly</option>
-                        <option value="semi_monthly">Semi-monthly</option>
-                        <option value="quarterly">Quarterly</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
+                      />
                     </div>
 
                     <div>
@@ -317,13 +251,19 @@ export function AddStaffDialog({ branchId }: { branchId: string }) {
                       <input
                         name="performance_rating"
                         type="number"
-                        step="0.01"
+                        step="0.5"
                         min="0"
                         max="5"
                         defaultValue="0"
                         className="mt-2 w-full rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm font-medium focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10"
                       />
                     </div>
+
+                    <input type="hidden" name="role" value="crew" />
+                    <input type="hidden" name="shift" value="full" />
+                    <input type="hidden" name="hours_per_week" value="40" />
+                    <input type="hidden" name="status" value="active" />
+                    <input type="hidden" name="notes" value="" />
 
                     <div className="sm:col-span-2 flex items-center justify-end gap-3 mt-2">
                       <button
