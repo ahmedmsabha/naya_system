@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Warehouse, Users, BarChart3, Settings, ChevronRight } from "lucide-react";
+import { ArrowLeft, Warehouse, Users, BarChart3, Settings, ChevronRight, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 
@@ -36,6 +36,13 @@ export default async function BranchDashboard({
       title: "Staffing",
       subtitle: "Employee Records",
       icon: Users,
+    },
+    {
+      id: "payroll",
+      href: `/branch/${id}/payroll`,
+      title: "Payroll",
+      subtitle: "Salary Review",
+      icon: Wallet,
     },
     {
       id: "financials",
@@ -87,7 +94,7 @@ export default async function BranchDashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
         {modules.map((module) => (
           <Link
             key={module.id}

@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, RefreshCcw, BadgeCheck } from "lucide-react";
+import { Wallet, Users, RefreshCcw, BadgeCheck } from "lucide-react";
 
 const navItems = [
-  { label: "Overview", icon: LayoutDashboard, segment: "" },
-  { label: "Employees", icon: Users, segment: "" },
+  { label: "Staffing Entry", icon: Users, href: "staffing" },
+  { label: "Payroll Review", icon: Wallet, href: "payroll" },
 ];
 
 export function StaffingSidebar({ branchId }: { branchId: string }) {
   const pathname = usePathname();
-  const base = `/branch/${branchId}/staffing`;
+  const baseBranch = `/branch/${branchId}`;
 
   return (
     <div className="flex flex-col w-[220px] shrink-0 bg-white border-l border-gray-100 h-full py-8 px-4 gap-1.5 shadow-[inset_1px_0_0_0_rgba(0,0,0,0.02)]">
@@ -29,8 +29,8 @@ export function StaffingSidebar({ branchId }: { branchId: string }) {
         <p className="px-3 text-[10px] font-black text-gray-400 tracking-widest uppercase mb-2">Main Menu</p>
 
         {navItems.map((item) => {
-          const href = item.segment ? `${base}/${item.segment}` : base;
-          const isActive = pathname === base || pathname === base + "/";
+          const href = `${baseBranch}/${item.href}`;
+          const isActive = pathname === href || pathname === `${href}/`;
           return (
             <Link
               key={item.label}

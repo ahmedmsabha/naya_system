@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { deleteStaff, toggleStaffAdpStatus, upsertStaffingSnapshot } from "@/app/(dashboard)/branch/[id]/staffing/actions";
 import { StarRating } from "@/components/staffing/StarRating";
 import { BadgeCheck, Loader2, Pencil, Trash2 } from "lucide-react";
-import { formatNumberEn } from "@/lib/format/en";
 
 export type EmployeeStatic = {
   id: string;
@@ -40,42 +39,18 @@ function fallbackRecord(): StaffingRecord {
   };
 }
 
-function diffLabel(curr: StaffingRecord | null, prev: StaffingRecord | null): string | null {
-  if (!curr || !prev) return null;
-  const currTotal = curr.salaryP1 + curr.salaryP2;
-  const prevTotal = prev.salaryP1 + prev.salaryP2;
-  if (currTotal !== prevTotal) {
-    const arrow = currTotal > prevTotal ? "↑" : "↓";
-    return `Salary ${prevTotal} → ${currTotal} ${arrow}`;
-  }
-  if (curr.salaryP1 !== prev.salaryP1 || curr.salaryP2 !== prev.salaryP2) {
-    return "Salary split changed";
-  }
-  if (curr.performanceRating !== prev.performanceRating) {
-    return `Rating ${prev.performanceRating} → ${curr.performanceRating}`;
-  }
-  if (curr.role !== prev.role) return `Role ${prev.role} → ${curr.role}`;
-  if (curr.shift !== prev.shift) return `Shift ${prev.shift} → ${curr.shift}`;
-  if (curr.status !== prev.status) return `Status ${prev.status} → ${curr.status}`;
-  if (curr.hoursPerWeek !== prev.hoursPerWeek) return `Hours ${prev.hoursPerWeek} → ${curr.hoursPerWeek}`;
-  if ((curr.notes || "") !== (prev.notes || "")) return "Notes updated";
-  return null;
-}
-
 export function StaffTable({
   branchId,
   employees,
   selectedPeriod,
   isHistorical,
   selectedSnapshot,
-  previousSnapshot,
 }: {
   branchId: string;
   employees: EmployeeStatic[];
   selectedPeriod: string;
   isHistorical: boolean;
   selectedSnapshot: Record<string, StaffingRecord>;
-  previousSnapshot: Record<string, StaffingRecord>;
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -207,8 +182,7 @@ export function StaffTable({
               <th className="py-4 px-4 text-center">ADP</th>
               <th className="py-4 px-4 text-center">Contact</th>
               <th className="py-4 px-4 text-center">Performance</th>
-              <th className="py-4 px-4 text-center">Salary (half split)</th>
-              <th className="py-4 px-4 text-center">Diff vs prev</th>
+              <th className="py-4 px-4 text-center">Snapshot</th>
               <th className="py-4 px-4 text-right">Action</th>
             </tr>
           </thead>
@@ -216,12 +190,15 @@ export function StaffTable({
           <tbody>
             {filtered.map((r) => {
               const current = selectedSnapshot[r.id] ?? null;
-              const prev = previousSnapshot[r.id] ?? null;
               const effective = current ?? fallbackRecord();
-              const diff = diffLabel(current, prev);
               const isConnected = r.adp_status === "connected";
               const isPending = pendingId === r.id;
-              const total = effective.salaryP1 + effective.salaryP2;
+              const statusTone =
+                effective.status === "active"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : effective.status === "on-leave"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-red-50 text-red-700";
               return (
                 <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-colors">
                   <td className="py-7 px-6">
@@ -269,22 +246,12 @@ export function StaffTable({
                     </div>
                   </td>
                   <td className="py-7 px-4 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="font-black text-[#052e36]">${formatNumberEn(effective.salaryP1)}</div>
-                      <div className="font-black text-[#052e36]">${formatNumberEn(effective.salaryP2)}</div>
-                      <div className="mt-1 rounded-xl bg-[#052e36] text-white px-4 py-1.5 text-[11px] font-black tracking-widest">
-                        TOTAL: ${formatNumberEn(total)}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-7 px-4 text-center">
-                    {diff ? (
-                      <span className="inline-flex rounded-xl bg-[#eef5fe] text-[#2563eb] px-3 py-1 text-[10px] font-black">
-                        {diff}
+                    <div className="inline-flex flex-col items-center gap-2">
+                      <span className="text-[10px] font-black text-gray-400 uppercase">{effective.role}</span>
+                      <span className={`inline-flex rounded-xl px-3 py-1 text-[10px] font-black uppercase ${statusTone}`}>
+                        {effective.status}
                       </span>
-                    ) : (
-                      <span className="text-[10px] font-black text-gray-300">No change</span>
-                    )}
+                    </div>
                   </td>
 
                   <td className="py-7 px-4 text-left">
@@ -316,7 +283,7 @@ export function StaffTable({
 
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-14 text-center text-gray-400 font-bold">
+                <td colSpan={6} className="py-14 text-center text-gray-400 font-bold">
                   No employees match your search
                 </td>
               </tr>

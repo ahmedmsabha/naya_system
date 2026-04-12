@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Warehouse, Users, BarChart3, Settings } from "lucide-react";
+import { ArrowLeft, Warehouse, Users, BarChart3, Settings, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +28,7 @@ export default async function ModuleDashboard({
   let Icon = Settings;
   if (module === "warehouse") Icon = Warehouse;
   else if (module === "staffing") Icon = Users;
+  else if (module === "payroll") Icon = Wallet;
   else if (module === "financials") Icon = BarChart3;
 
   return (

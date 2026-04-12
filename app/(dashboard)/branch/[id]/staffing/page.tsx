@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { AddStaffDialog } from "@/components/staffing/AddStaffDialog";
 import { StaffTable, type EmployeeStatic, type StaffingRecord } from "@/components/staffing/StaffTable";
 import { syncPayrollAction } from "./actions";
-import { formatNumberEn } from "@/lib/format/en";
 
 export const dynamic = "force-dynamic";
 
@@ -88,23 +89,24 @@ export default async function StaffingPage({
       }
     }
   }
-  const previousSnapshot = previousPeriod ? staffingByPeriod.get(previousPeriod) ?? null : null;
 
   const staffCount = employees.length;
   const adpConnected = employees.filter((r) => r.adp_status === "connected").length;
-  const periodPayroll = Array.from(selectedSnapshot.values()).reduce(
-    (sum, r) => sum + Number(r.salaryP1 || 0) + Number(r.salaryP2 || 0),
-    0
-  );
-
   return (
     <div dir="ltr" className="max-w-7xl">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
         <div>
           <h1 className="text-3xl font-black text-[#052e36] tracking-tight">Staffing</h1>
           <p className="text-gray-400 text-sm font-bold mt-2">
-            {branch.name} — period snapshot staffing
+            {branch.name} - employee information entry and updates
           </p>
+          <Link
+            href={`/branch/${id}/payroll?period=${selectedPeriod}`}
+            className="mt-3 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[.2em] text-[#2563eb] hover:text-[#1d4ed8]"
+          >
+            Open payroll review
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
 
         <AddStaffDialog branchId={id} selectedPeriod={selectedPeriod} />
@@ -123,10 +125,8 @@ export default async function StaffingPage({
         <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-[11px] font-black text-gray-300 tracking-widest uppercase">{selectedPeriod}</div>
-            <div className="mt-2 text-xl font-black text-[#052e36]">
-              ${formatNumberEn(periodPayroll, { maximumFractionDigits: 0 })}
-            </div>
-            <div className="text-[11px] font-bold text-gray-400 mt-1">period payroll snapshot</div>
+            <div className="mt-2 text-xl font-black text-[#052e36]">Entry Period</div>
+            <div className="text-[11px] font-bold text-gray-400 mt-1">new and edited records apply to this period</div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[#eaf8f3] border border-emerald-100" />
         </div>
@@ -164,13 +164,6 @@ export default async function StaffingPage({
         selectedSnapshot={Object.fromEntries(
           Array.from(selectedSnapshot.entries()).map(([staffId, rec]) => [staffId, { ...rec }])
         ) as Record<string, StaffingRecord>}
-        previousSnapshot={
-          previousSnapshot
-            ? (Object.fromEntries(
-                Array.from(previousSnapshot.entries()).map(([staffId, rec]) => [staffId, { ...rec }])
-              ) as Record<string, StaffingRecord>)
-            : {}
-        }
       />
     </div>
   );
