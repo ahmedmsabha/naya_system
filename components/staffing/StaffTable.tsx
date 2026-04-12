@@ -86,7 +86,7 @@ export function StaffTable({
     fd.set("staff_id", id);
     startTransition(async () => {
       const res = await deleteStaff(fd);
-      if (res?.error) alert(res.error);
+      if (res && "error" in res) alert(res.error);
       setPendingId(null);
       router.refresh();
     });
@@ -99,7 +99,7 @@ export function StaffTable({
     fd.set("staff_id", staffId);
     startTransition(async () => {
       const res = await toggleStaffAdpStatus(fd);
-      if (res?.error) alert(res.error);
+      if (res && "error" in res) alert(res.error);
       setTogglingAdpId(null);
       router.refresh();
     });
@@ -129,7 +129,7 @@ export function StaffTable({
     startSaveTransition(async () => {
       setEditError(null);
       const res = await upsertStaffingSnapshot(fd);
-      if (res?.error) return setEditError(res.error);
+      if (res && "error" in res) return setEditError(res.error ?? "Something went wrong");
       router.refresh();
       closeEdit();
     });
