@@ -53,6 +53,18 @@ export function StaffTable({
   isHistorical: boolean;
   selectedSnapshot: Record<string, StaffingRecord>;
 }) {
+  const getActionError = (result: unknown): string | null => {
+    if (
+      result &&
+      typeof result === "object" &&
+      "error" in result &&
+      typeof (result as { error?: unknown }).error === "string"
+    ) {
+      return (result as { error: string }).error;
+    }
+    return null;
+  };
+
   const router = useRouter();
   const [q, setQ] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -90,7 +102,8 @@ export function StaffTable({
     fd.set("staff_id", id);
     startTransition(async () => {
       const res = await deleteStaff(fd);
-      if (res?.error) alert(res.error);
+      const error = getActionError(res);
+      if (error) alert(error);
       setPendingId(null);
       router.refresh();
     });
@@ -103,7 +116,8 @@ export function StaffTable({
     fd.set("staff_id", staffId);
     startTransition(async () => {
       const res = await toggleStaffAdpStatus(fd);
-      if (res?.error) alert(res.error);
+      const error = getActionError(res);
+      if (error) alert(error);
       setTogglingAdpId(null);
       router.refresh();
     });
@@ -135,7 +149,8 @@ export function StaffTable({
     setQuickSavingKey(saveKey);
     startTransition(async () => {
       const res = await upsertStaffingSnapshot(fd);
-      if (res?.error) alert(res.error);
+      const error = getActionError(res);
+      if (error) alert(error);
       setQuickSavingKey(null);
       router.refresh();
     });
@@ -165,7 +180,8 @@ export function StaffTable({
     startSaveTransition(async () => {
       setEditError(null);
       const res = await upsertStaffingSnapshot(fd);
-      if (res?.error) return setEditError(res.error);
+      const error = getActionError(res);
+      if (error) return setEditError(error);
       router.refresh();
       closeEdit();
     });
