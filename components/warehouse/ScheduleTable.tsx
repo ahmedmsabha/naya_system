@@ -71,6 +71,16 @@ export function ScheduleTable({
     [items]
   );
 
+  const weekGrandTotalPrice = useMemo(() => {
+    return rowMeta.reduce((sum, item) => {
+      const rowQty = DAYS.reduce(
+        (qtySum, day) => qtySum + (weekInventoryByDate[weekDates[day]]?.[item.ingredient_id] || 0),
+        0
+      );
+      return sum + rowQty * item.unit_cost;
+    }, 0);
+  }, [rowMeta, weekDates, weekInventoryByDate]);
+
   const setCell = (ingredientId: string, dateIso: string, qty: number) => {
     setWeekInventoryByDate((prev) => {
       const day = { ...(prev[dateIso] ?? {}) };
@@ -233,6 +243,17 @@ export function ScheduleTable({
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-t border-gray-100 bg-gray-50/40">
+              <td className="px-4 py-4 text-left text-[11px] font-black text-gray-500 uppercase tracking-wider">
+                Week total price
+              </td>
+              <td colSpan={8} />
+              <td className="px-3 py-4 text-center font-black text-[#052e36]">
+                ${formatNumberEn(weekGrandTotalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>

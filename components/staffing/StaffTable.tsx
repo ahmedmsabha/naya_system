@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { deleteStaff, toggleStaffAdpStatus, upsertStaffingSnapshot } from "@/app/(dashboard)/branch/[id]/staffing/actions";
 import { StarRating } from "@/components/staffing/StarRating";
 import { BadgeCheck, Loader2, Pencil, Trash2 } from "lucide-react";
+import { formatNumberEn } from "@/lib/format/en";
 
 export type EmployeeStatic = {
   id: string;
@@ -61,6 +62,9 @@ export function StaffTable({
   const [editError, setEditError] = useState<string | null>(null);
   const [isSaving, startSaveTransition] = useTransition();
   const [togglingAdpId, setTogglingAdpId] = useState<string | null>(null);
+  const [quickSavingKey, setQuickSavingKey] = useState<string | null>(null);
+  const [salaryEditorFor, setSalaryEditorFor] = useState<string | null>(null);
+  const [salaryDraftById, setSalaryDraftById] = useState<Record<string, { p1: string; p2: string }>>({});
   const [allowHistorical, setAllowHistorical] = useState(false);
 
   const staffById = useMemo(() => {
@@ -86,7 +90,7 @@ export function StaffTable({
     fd.set("staff_id", id);
     startTransition(async () => {
       const res = await deleteStaff(fd);
-      if (res && "error" in res) alert(res.error);
+      if (res?.error) alert(res.error);
       setPendingId(null);
       router.refresh();
     });
@@ -99,8 +103,40 @@ export function StaffTable({
     fd.set("staff_id", staffId);
     startTransition(async () => {
       const res = await toggleStaffAdpStatus(fd);
-      if (res && "error" in res) alert(res.error);
+      if (res?.error) alert(res.error);
       setTogglingAdpId(null);
+      router.refresh();
+    });
+  };
+
+  const saveSnapshotQuick = (staffId: string, patch: Partial<StaffingRecord>, saveKey: string) => {
+    if (isHistorical) {
+      const ok = window.confirm(`You are editing historical period ${selectedPeriod}. Continue?`);
+      if (!ok) return;
+    }
+
+    const base = selectedSnapshot[staffId] ?? fallbackRecord();
+    const next: StaffingRecord = { ...base, ...patch };
+
+    const fd = new FormData();
+    fd.set("branch_id", branchId);
+    fd.set("staff_id", staffId);
+    fd.set("selected_period", selectedPeriod);
+    if (isHistorical) fd.set("allow_historical", "1");
+    fd.set("role", next.role);
+    fd.set("salary_p1", String(next.salaryP1));
+    fd.set("salary_p2", String(next.salaryP2));
+    fd.set("performance_rating", String(next.performanceRating));
+    fd.set("shift", next.shift);
+    fd.set("hours_per_week", String(next.hoursPerWeek));
+    fd.set("status", next.status);
+    fd.set("notes", next.notes);
+
+    setQuickSavingKey(saveKey);
+    startTransition(async () => {
+      const res = await upsertStaffingSnapshot(fd);
+      if (res?.error) alert(res.error);
+      setQuickSavingKey(null);
       router.refresh();
     });
   };
@@ -129,7 +165,7 @@ export function StaffTable({
     startSaveTransition(async () => {
       setEditError(null);
       const res = await upsertStaffingSnapshot(fd);
-      if (res && "error" in res) return setEditError(res.error ?? "Something went wrong");
+      if (res?.error) return setEditError(res.error);
       router.refresh();
       closeEdit();
     });
@@ -182,7 +218,9 @@ export function StaffTable({
               <th className="py-4 px-4 text-center">ADP</th>
               <th className="py-4 px-4 text-center">Contact</th>
               <th className="py-4 px-4 text-center">Performance</th>
-              <th className="py-4 px-4 text-center">Snapshot</th>
+              <th className="py-4 px-4 text-right">First Half</th>
+              <th className="py-4 px-4 text-right">Second Half</th>
+              <th className="py-4 px-4 text-right">Total</th>
               <th className="py-4 px-4 text-right">Action</th>
             </tr>
           </thead>
@@ -193,6 +231,7 @@ export function StaffTable({
               const effective = current ?? fallbackRecord();
               const isConnected = r.adp_status === "connected";
               const isPending = pendingId === r.id;
+              const totalSalary = Number(effective.salaryP1 || 0) + Number(effective.salaryP2 || 0);
               const statusTone =
                 effective.status === "active"
                   ? "bg-emerald-50 text-emerald-700"
@@ -205,8 +244,11 @@ export function StaffTable({
                     <div className="flex items-center gap-4">
                       <div className="min-w-0">
                         <div className="font-black text-[#052e36] truncate">{r.full_name}</div>
-                        <div className="text-[11px] font-bold text-gray-400 mt-1">
+                        <div className="text-[11px] font-bold text-gray-400 mt-1 flex items-center gap-2">
                           {r.employee_code ? `ID: ${r.employee_code}` : "—"}
+                          <span className={`inline-flex rounded-lg px-2 py-0.5 text-[9px] font-black uppercase ${statusTone}`}>
+                            {effective.status}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -239,19 +281,110 @@ export function StaffTable({
                   </td>
                   <td className="py-7 px-4 text-center">
                     <div className="inline-flex flex-col items-center gap-1">
-                      <StarRating rating={effective.performanceRating} size={16} />
+                      <div className="relative inline-block">
+                        <StarRating rating={effective.performanceRating} size={16} />
+                        <div className="absolute inset-0 grid grid-cols-10">
+                          {Array.from({ length: 10 }).map((_, i) => {
+                            const ratingValue = (i + 1) / 2;
+                            return (
+                              <button
+                                key={`${r.id}-rating-${ratingValue}`}
+                                type="button"
+                                title={`Set rating to ${ratingValue}`}
+                                onClick={() =>
+                                  saveSnapshotQuick(
+                                    r.id,
+                                    { performanceRating: ratingValue },
+                                    `${r.id}-rating`
+                                  )
+                                }
+                                className="h-full w-full"
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
                       <span className="text-[10px] font-black text-gray-400">
                         {effective.performanceRating.toFixed(1)}
                       </span>
                     </div>
                   </td>
-                  <td className="py-7 px-4 text-center">
-                    <div className="inline-flex flex-col items-center gap-2">
-                      <span className="text-[10px] font-black text-gray-400 uppercase">{effective.role}</span>
-                      <span className={`inline-flex rounded-xl px-3 py-1 text-[10px] font-black uppercase ${statusTone}`}>
-                        {effective.status}
-                      </span>
-                    </div>
+                  <td className="py-7 px-4 text-right font-black text-[#052e36]">
+                    ${formatNumberEn(effective.salaryP1)}
+                  </td>
+                  <td className="py-7 px-4 text-right font-black text-[#052e36]">
+                    ${formatNumberEn(effective.salaryP2)}
+                  </td>
+                  <td className="py-7 px-4 text-right">
+                    {salaryEditorFor === r.id ? (
+                      <div className="inline-flex flex-col items-end gap-2 rounded-xl border border-gray-200 bg-white p-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={salaryDraftById[r.id]?.p1 ?? String(effective.salaryP1)}
+                          onChange={(e) =>
+                            setSalaryDraftById((prev) => ({
+                              ...prev,
+                              [r.id]: { p1: e.target.value, p2: prev[r.id]?.p2 ?? String(effective.salaryP2) },
+                            }))
+                          }
+                          className="w-24 rounded-lg border border-gray-200 px-2 py-1 text-right text-xs font-bold"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={salaryDraftById[r.id]?.p2 ?? String(effective.salaryP2)}
+                          onChange={(e) =>
+                            setSalaryDraftById((prev) => ({
+                              ...prev,
+                              [r.id]: { p1: prev[r.id]?.p1 ?? String(effective.salaryP1), p2: e.target.value },
+                            }))
+                          }
+                          className="w-24 rounded-lg border border-gray-200 px-2 py-1 text-right text-xs font-bold"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded-lg bg-[#2563eb] px-2 py-1 text-[10px] font-black text-white"
+                            onClick={() => {
+                              const nextP1 = Math.max(0, Number(salaryDraftById[r.id]?.p1 ?? effective.salaryP1) || 0);
+                              const nextP2 = Math.max(0, Number(salaryDraftById[r.id]?.p2 ?? effective.salaryP2) || 0);
+                              saveSnapshotQuick(
+                                r.id,
+                                { salaryP1: nextP1, salaryP2: nextP2 },
+                                `${r.id}-salary`
+                              );
+                              setSalaryEditorFor(null);
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500"
+                            onClick={() => setSalaryEditorFor(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSalaryDraftById((prev) => ({
+                            ...prev,
+                            [r.id]: { p1: String(effective.salaryP1), p2: String(effective.salaryP2) },
+                          }));
+                          setSalaryEditorFor(r.id);
+                        }}
+                        className="inline-flex rounded-xl bg-[#eef5fe] text-[#2563eb] px-3 py-1.5 text-[12px] font-black hover:bg-[#dbeafe]"
+                      >
+                        ${formatNumberEn(totalSalary)}
+                      </button>
+                    )}
                   </td>
 
                   <td className="py-7 px-4 text-left">
@@ -276,6 +409,9 @@ export function StaffTable({
                         <Pencil className="w-4 h-4" />
                       </button>
                     </div>
+                    {quickSavingKey?.startsWith(`${r.id}-`) ? (
+                      <div className="mt-2 text-right text-[10px] font-black text-[#2563eb]">Saving...</div>
+                    ) : null}
                   </td>
                 </tr>
               );
@@ -283,7 +419,7 @@ export function StaffTable({
 
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-14 text-center text-gray-400 font-bold">
+                <td colSpan={8} className="py-14 text-center text-gray-400 font-bold">
                   No employees match your search
                 </td>
               </tr>

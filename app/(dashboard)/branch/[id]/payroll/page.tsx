@@ -1,8 +1,5 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { formatNumberEn } from "@/lib/format/en";
 import { PayrollReviewTable, type PayrollEmployee, type PayrollRecord } from "@/components/payroll/PayrollReviewTable";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +20,12 @@ export default async function PayrollPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; half?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
   const selectedPeriod = /^\d{4}-\d{2}$/.test(String(sp.period ?? "")) ? String(sp.period) : nowMonthKey();
+  const selectedHalf = ["all", "p1", "p2"].includes(String(sp.half ?? "")) ? String(sp.half) : "p1";
   const selectedMonthStart = `${selectedPeriod}-01`;
   const supabase = await createClient();
 
@@ -88,50 +86,27 @@ export default async function PayrollPage({
     },
     { p1: 0, p2: 0 }
   );
-  const totalMonth = totals.p1 + totals.p2;
+  const monthLabel = new Date(`${selectedPeriod}-01T12:00:00`).toLocaleDateString("en-US", { month: "long" });
+  const halfLabel = selectedHalf === "p1" ? "01-15" : selectedHalf === "p2" ? "16-30" : "Full month";
 
   return (
-    <div className="max-w-7xl">
+    <div className="max-w-7xl" dir="ltr">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
-        <div>
-          <Link
-            href={`/branch/${id}/staffing`}
-            className="inline-flex items-center gap-2 text-[11px] font-black tracking-[.2em] text-[#a48443]/60 hover:text-[#a48443] transition-all uppercase"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Staffing
-          </Link>
-          <h1 className="text-3xl font-black text-[#052e36] tracking-tight mt-4">Payroll Review</h1>
-          <p className="text-gray-400 text-sm font-bold mt-2">
-            {branch.name} - salary checking view by period
+        <div className="text-left">
+          <h1 className="text-4xl font-black text-[#111827] tracking-tight">Salary Payment System</h1>
+          <p className="text-gray-500 text-sm font-bold mt-2">
+            {monthLabel} payout statement - {halfLabel}
           </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
-          <div className="text-[11px] font-black text-gray-300 tracking-widest uppercase">P1 (01-15)</div>
-          <div className="mt-2 text-2xl font-black text-[#052e36]">
-            ${formatNumberEn(totals.p1, { maximumFractionDigits: 0 })}
-          </div>
-        </div>
-        <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
-          <div className="text-[11px] font-black text-gray-300 tracking-widest uppercase">P2 (16-30)</div>
-          <div className="mt-2 text-2xl font-black text-[#052e36]">
-            ${formatNumberEn(totals.p2, { maximumFractionDigits: 0 })}
-          </div>
-        </div>
-        <div className="bg-[#2563eb] rounded-[2rem] p-6 shadow-lg shadow-blue-200/30">
-          <div className="text-[11px] font-black text-blue-100 tracking-widest uppercase">Total month</div>
-          <div className="mt-2 text-2xl font-black text-white">
-            ${formatNumberEn(totalMonth, { maximumFractionDigits: 0 })}
-          </div>
         </div>
       </div>
 
       <PayrollReviewTable
         branchId={id}
+        branchName={String(branch.name ?? "").toUpperCase()}
         selectedPeriod={selectedPeriod}
+        selectedHalf={selectedHalf as "all" | "p1" | "p2"}
+        periodLabel={`${monthLabel} - ${halfLabel}`}
+        periodTotals={totals}
         employees={employees}
         selectedSnapshot={Object.fromEntries(
           Array.from(selectedSnapshot.entries()).map(([staffId, rec]) => [staffId, { ...rec }])

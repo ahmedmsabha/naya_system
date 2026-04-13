@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wallet, Users, RefreshCcw, BadgeCheck } from "lucide-react";
+import {
+  Wallet,
+  Users,
+  RefreshCcw,
+  BadgeCheck,
+} from "lucide-react";
 
 const navItems = [
   { label: "Staffing Entry", icon: Users, href: "staffing" },
