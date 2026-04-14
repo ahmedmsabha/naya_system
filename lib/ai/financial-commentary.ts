@@ -53,24 +53,32 @@ export async function generateFinancialCommentary(payload: CommentaryPayload): P
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return fallbackCommentary(payload);
 
-  const prompt = `You are a CFO-grade restaurant analytics copilot.
-Generate exactly 3 executive commentary sentences in English.
+  const contextJson = JSON.stringify(payload.context, null, 2);
+  const prompt = `You are an executive financial analyst for a restaurant group.
 
-Rules:
-- Keep each sentence under 30 words.
-- Mention concrete numbers (currency or percentages) from the provided context.
-- Be specific and operational, not generic.
-- No markdown.
-- Return strict JSON only:
+Return exactly 3 short executive insights in English.
+Use only the provided metrics. Do not invent, estimate, or assume any number.
+If a metric is missing, skip it and rely on available data.
+
+Output format (strict JSON only):
 {
-  "insights": ["sentence1", "sentence2", "sentence3"]
+  "insights": ["...", "...", "..."]
 }
 
+Rules:
+- Exactly 3 insights.
+- Each insight maximum 22 words.
+- Tone: sharp, board-level, action-oriented.
+- No markdown, no bullets, no extra keys, no commentary.
+- Use concrete figures where available (for example gross sales, net profit, net margin, food cost %, top loss sources, open alerts).
+
+Input:
 Focus: ${payload.focus}
 Period: ${payload.period}
 Branch: ${payload.branchName}
-Context JSON:
-${JSON.stringify(payload.context, null, 2)}
+
+Financial Metrics JSON:
+${contextJson}
 `;
 
   try {
@@ -87,7 +95,7 @@ ${JSON.stringify(payload.context, null, 2)}
       .filter(Boolean)
       .slice(0, 3);
 
-    if (insights.length === 3) return insights;
+    if (insights.length === 3 && parsed.insights.length === 3) return insights;
     return fallbackCommentary(payload);
   } catch {
     return fallbackCommentary(payload);

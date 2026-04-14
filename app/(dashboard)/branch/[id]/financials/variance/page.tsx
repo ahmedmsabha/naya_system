@@ -2,6 +2,10 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { ExecutiveVarianceDashboard } from '@/components/finance/ExecutiveVarianceDashboard';
 import { generateFinancialCommentary } from '@/lib/ai/financial-commentary';
+import {
+  MONTHLY_PNL_EXPENSE_CATEGORIES,
+  type MonthlyPnLExpenseCategory,
+} from '@/lib/finance/monthly-pnl';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +28,12 @@ function monthEndIso(period: string): string {
   return `${period}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function nextMonthStartIso(period: string): string {
+  const d = new Date(`${period}-01T12:00:00`);
+  d.setMonth(d.getMonth() + 1);
+  return monthStartIso(monthKeyFromDate(d));
+}
+
 function addMonths(period: string, delta: number): string {
   const d = new Date(`${period}-01T12:00:00`);
   d.setMonth(d.getMonth() + delta);
@@ -35,14 +45,14 @@ function percentage(value: number, total: number): number {
   return (value / total) * 100;
 }
 
-function normalizeIngredient(
-  ingredient:
-    | { name?: string | null; unit?: string | null; cost_per_unit?: number | null }
-    | Array<{ name?: string | null; unit?: string | null; cost_per_unit?: number | null }>
-    | null,
-) {
-  if (!ingredient) return null;
-  return Array.isArray(ingredient) ? ingredient[0] : ingredient;
+function mapIngredientToCategory(name: string): MonthlyPnLExpenseCategory {
+  const normalized = name.toLowerCase();
+  if (normalized.includes('bread')) return 'Bread';
+  if (normalized.includes('paper') || normalized.includes('packag')) return 'Lenard Paper';
+  if (normalized.includes('keany') || normalized.includes('produce')) return "Keany's";
+  if (normalized.includes('pfg')) return 'PFG';
+  if (normalized.includes('warehouse') || normalized.includes('commissary')) return 'Warehouse';
+  return 'US Foods';
 }
 
 export default async function FinancialVariancePage({
@@ -59,6 +69,7 @@ export default async function FinancialVariancePage({
     : monthKeyNow();
   const selectedStart = monthStartIso(selectedPeriod);
   const selectedEnd = monthEndIso(selectedPeriod);
+  const nextMonthStart = nextMonthStartIso(selectedPeriod);
 
   const supabase = await createClient();
   const { data: branch } = await supabase
@@ -68,57 +79,47 @@ export default async function FinancialVariancePage({
     .single();
   if (!branch) notFound();
 
-  const { data: salesRowsCurrent } = await supabase
-    .from('sales')
-    .select('recipe_id, quantity_sold, total_revenue')
-    .eq('branch_id', id)
-    .gte('sale_date', selectedStart)
-    .lte('sale_date', selectedEnd);
+  const [{ data: salesRowsCurrent }, { data: expenseRows }, { data: warehouseInvoiceRows }, { data: laborSnapshots }] =
+    await Promise.all([
+      supabase
+        .from('sales')
+        .select('recipe_id, quantity_sold, total_revenue')
+        .eq('branch_id', id)
+        .gte('sale_date', selectedStart)
+        .lte('sale_date', selectedEnd),
+      supabase
+        .from('branch_monthly_expenses')
+        .select('category, amount')
+        .eq('branch_id', id)
+        .eq('month_period', selectedPeriod),
+      supabase
+        .from('warehouse_invoices')
+        .select('total_amount')
+        .eq('branch_id', id)
+        .lte('billing_period_start', selectedEnd)
+        .gte('billing_period_end', selectedStart),
+      supabase
+        .from('branch_staff_compensation_history')
+        .select('staff_id, base_salary, recorded_at')
+        .eq('branch_id', id)
+        .gte('effective_month', selectedStart)
+        .lt('effective_month', nextMonthStart)
+        .order('recorded_at', { ascending: false }),
+    ]);
 
-  const { data: distributionRowsCurrent } = await supabase
-    .from('warehouse_distributions')
-    .select('ingredient_id, quantity, ingredients(name, unit, cost_per_unit)')
-    .eq('branch_id', id)
-    .gte('distributed_at', selectedStart)
-    .lte('distributed_at', selectedEnd);
+  const grossSales = (salesRowsCurrent ?? []).reduce(
+    (sum, row) => sum + (Number(row.total_revenue ?? 0) || 0),
+    0,
+  );
 
   const recipeIds = Array.from(new Set((salesRowsCurrent ?? []).map((row) => String(row.recipe_id))));
   const { data: recipeItemsRows } =
     recipeIds.length > 0
       ? await supabase
           .from('recipe_items')
-          .select('recipe_id, ingredient_id, quantity_grams, ingredients(name, unit, cost_per_unit)')
+          .select('recipe_id, quantity_grams, ingredients(name, cost_per_unit)')
           .in('recipe_id', recipeIds)
       : { data: [] };
-
-  const [
-    { data: warehouseInvoiceRows },
-    { data: accountantInvoiceRows },
-    { data: payrollRows },
-    { count: openAlertsCountRaw },
-  ] = await Promise.all([
-    supabase
-      .from('warehouse_invoices')
-      .select('total_amount')
-      .eq('branch_id', id)
-      .gte('billing_period_start', selectedStart)
-      .lte('billing_period_end', selectedEnd),
-    supabase
-      .from('tarek_invoices')
-      .select('amount')
-      .gte('created_at', `${selectedStart}T00:00:00`)
-      .lte('created_at', `${selectedEnd}T23:59:59`),
-    supabase
-      .from('branch_staff')
-      .select('base_salary')
-      .eq('branch_id', id)
-      .eq('status', 'active'),
-    supabase
-      .from('alerts')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', id)
-      .eq('is_read', false),
-  ]);
 
   const salesByRecipe = new Map<string, number>();
   for (const row of salesRowsCurrent ?? []) {
@@ -127,65 +128,92 @@ export default async function FinancialVariancePage({
     salesByRecipe.set(recipeId, (salesByRecipe.get(recipeId) ?? 0) + qty);
   }
 
-  const idealUsageByIngredient = new Map<
-    string,
-    { ingredient: string; unit: string; costPerUnit: number; quantity: number }
-  >();
+  const idealCostByCategory = new Map<MonthlyPnLExpenseCategory, number>();
+  for (const category of MONTHLY_PNL_EXPENSE_CATEGORIES) idealCostByCategory.set(category, 0);
+
   for (const row of recipeItemsRows ?? []) {
     const recipeId = String(row.recipe_id);
     const soldQty = salesByRecipe.get(recipeId) ?? 0;
     if (soldQty <= 0) continue;
-    const ingredientId = String(row.ingredient_id);
-    const ingredient = normalizeIngredient(row.ingredients ?? null);
-    const existing = idealUsageByIngredient.get(ingredientId);
-    const usage = soldQty * (Number(row.quantity_grams ?? 0) || 0);
-    idealUsageByIngredient.set(ingredientId, {
-      ingredient: existing?.ingredient ?? String(ingredient?.name ?? 'Uncategorized'),
-      unit: existing?.unit ?? String(ingredient?.unit ?? 'unit'),
-      costPerUnit: existing?.costPerUnit ?? (Number(ingredient?.cost_per_unit ?? 0) || 0),
-      quantity: (existing?.quantity ?? 0) + usage,
-    });
+    const ingredient = Array.isArray(row.ingredients) ? row.ingredients[0] : row.ingredients;
+    const ingredientName = String(ingredient?.name ?? 'US Foods');
+    const costPerUnit = Number(ingredient?.cost_per_unit ?? 0) || 0;
+    const quantityGrams = Number(row.quantity_grams ?? 0) || 0;
+    const theoreticalCost = soldQty * quantityGrams * costPerUnit;
+    const category = mapIngredientToCategory(ingredientName);
+    idealCostByCategory.set(category, (idealCostByCategory.get(category) ?? 0) + theoreticalCost);
   }
 
-  const actualUsageByIngredient = new Map<
-    string,
-    { ingredient: string; unit: string; costPerUnit: number; quantity: number }
-  >();
-  for (const row of distributionRowsCurrent ?? []) {
-    const ingredientId = String(row.ingredient_id);
-    const ingredient = normalizeIngredient(row.ingredients ?? null);
-    const existing = actualUsageByIngredient.get(ingredientId);
-    actualUsageByIngredient.set(ingredientId, {
-      ingredient: existing?.ingredient ?? String(ingredient?.name ?? 'Uncategorized'),
-      unit: existing?.unit ?? String(ingredient?.unit ?? 'unit'),
-      costPerUnit: existing?.costPerUnit ?? (Number(ingredient?.cost_per_unit ?? 0) || 0),
-      quantity: (existing?.quantity ?? 0) + (Number(row.quantity ?? 0) || 0),
-    });
+  const benchmarkRatios: Record<MonthlyPnLExpenseCategory, number> = {
+    Royalty: 0.06,
+    'US Foods': 0,
+    'Lenard Paper': 0,
+    PFG: 0,
+    "Keany's": 0,
+    Warehouse: 0,
+    Gas: 0.018,
+    Power: 0.028,
+    Water: 0.01,
+    Rent: 0.12,
+    Labor: 0.24,
+    Bread: 0,
+    Ecolab: 0.008,
+    'Hood Cleaning': 0.006,
+    Maintenance: 0.012,
+  };
+
+  for (const category of MONTHLY_PNL_EXPENSE_CATEGORIES) {
+    if ((idealCostByCategory.get(category) ?? 0) > 0) continue;
+    const ratio = benchmarkRatios[category];
+    if (ratio > 0) {
+      idealCostByCategory.set(category, grossSales * ratio);
+    }
   }
 
-  const matrixRows = Array.from(
-    new Set([...idealUsageByIngredient.keys(), ...actualUsageByIngredient.keys()]),
-  )
-    .map((ingredientId) => {
-      const ideal = idealUsageByIngredient.get(ingredientId);
-      const actual = actualUsageByIngredient.get(ingredientId);
-      const idealUsage = Number(ideal?.quantity ?? 0);
-      const actualUsage = Number(actual?.quantity ?? 0);
-      const varianceAmount = actualUsage - idealUsage;
-      const variancePercent = percentage(varianceAmount, idealUsage);
-      const costPerUnit = Number(ideal?.costPerUnit ?? actual?.costPerUnit ?? 0);
-      return {
-        ingredient: String(ideal?.ingredient ?? actual?.ingredient ?? 'Uncategorized'),
-        unit: String(ideal?.unit ?? actual?.unit ?? 'unit'),
-        idealUsage,
-        actualUsage,
-        costPerUnit,
-        varianceAmount,
-        variancePercent,
-        monetaryVariance: varianceAmount * costPerUnit,
-      };
-    })
-    .sort((a, b) => Math.abs(b.monetaryVariance) - Math.abs(a.monetaryVariance));
+  const actualCostByCategory = new Map<MonthlyPnLExpenseCategory, number>();
+  for (const category of MONTHLY_PNL_EXPENSE_CATEGORIES) actualCostByCategory.set(category, 0);
+
+  for (const row of expenseRows ?? []) {
+    const category = String(row.category ?? '') as MonthlyPnLExpenseCategory;
+    if (!MONTHLY_PNL_EXPENSE_CATEGORIES.includes(category)) continue;
+    actualCostByCategory.set(category, Number(row.amount ?? 0) || 0);
+  }
+
+  let laborFallback = 0;
+  const latestByStaff = new Map<string, number>();
+  for (const row of laborSnapshots ?? []) {
+    const staffId = String(row.staff_id ?? '');
+    if (!staffId || latestByStaff.has(staffId)) continue;
+    latestByStaff.set(staffId, Number(row.base_salary ?? 0) || 0);
+  }
+  laborFallback = Array.from(latestByStaff.values()).reduce((sum, value) => sum + value, 0);
+  if ((actualCostByCategory.get('Labor') ?? 0) <= 0) {
+    actualCostByCategory.set('Labor', laborFallback);
+  }
+
+  const warehouseFallback = (warehouseInvoiceRows ?? []).reduce(
+    (sum, row) => sum + (Number(row.total_amount ?? 0) || 0),
+    0,
+  );
+  if ((actualCostByCategory.get('Warehouse') ?? 0) <= 0) {
+    actualCostByCategory.set('Warehouse', warehouseFallback);
+  }
+
+  const matrixRows = MONTHLY_PNL_EXPENSE_CATEGORIES.map((category) => {
+    const idealCost = Number((idealCostByCategory.get(category) ?? 0).toFixed(2));
+    const actualCost = Number((actualCostByCategory.get(category) ?? 0).toFixed(2));
+    const variance = Number((actualCost - idealCost).toFixed(2));
+    const variancePercent = percentage(variance, idealCost);
+    return {
+      ingredient: category,
+      unit: '$',
+      idealUsage: idealCost,
+      actualUsage: actualCost,
+      varianceAmount: variance,
+      variancePercent,
+      monetaryVariance: variance,
+    };
+  }).sort((a, b) => Math.abs(b.monetaryVariance) - Math.abs(a.monetaryVariance));
 
   const topLossSources = matrixRows
     .filter((row) => row.monetaryVariance > 0)
@@ -206,34 +234,10 @@ export default async function FinancialVariancePage({
           variancePercent: row.variancePercent,
         }));
 
-  const grossSales = (salesRowsCurrent ?? []).reduce(
-    (sum, row) => sum + (Number(row.total_revenue ?? 0) || 0),
-    0,
-  );
-  const cogs = matrixRows.reduce((sum, row) => sum + row.idealUsage * row.costPerUnit, 0);
-  const distributionCost = matrixRows.reduce(
-    (sum, row) => sum + row.actualUsage * row.costPerUnit,
-    0,
-  );
-  const wastePressure = Math.max(0, distributionCost - cogs);
-  const laborCost = grossSales * 0.24;
-  const opEx = grossSales * 0.15 + wastePressure * 0.35;
-  const netProfit = grossSales - cogs - laborCost - opEx;
+  const totalIdealCost = matrixRows.reduce((sum, row) => sum + row.idealUsage, 0);
+  const totalActualCost = matrixRows.reduce((sum, row) => sum + row.actualUsage, 0);
+  const netProfit = grossSales - totalActualCost;
   const netMargin = percentage(netProfit, grossSales);
-
-  const warehouseInvoiceTotal = (warehouseInvoiceRows ?? []).reduce(
-    (sum, row) => sum + (Number(row.total_amount ?? 0) || 0),
-    0,
-  );
-  const accountantInvoiceTotal = (accountantInvoiceRows ?? []).reduce(
-    (sum, row) => sum + (Number(row.amount ?? 0) || 0),
-    0,
-  );
-  const payrollTotal = (payrollRows ?? []).reduce(
-    (sum, row) => sum + (Number(row.base_salary ?? 0) || 0),
-    0,
-  );
-  const openAlertsCount = Number(openAlertsCountRaw ?? 0);
 
   const primaryLoss = fallbackLossSources[0];
   const insights = await generateFinancialCommentary({
@@ -244,16 +248,14 @@ export default async function FinancialVariancePage({
       grossSales,
       netProfit,
       netMarginPct: netMargin,
-      cogs,
-      foodCostPct: percentage(cogs, grossSales),
-      laborCostPct: percentage(laborCost, grossSales),
-      highRiskVarianceItems: matrixRows.filter((row) => Math.abs(row.variancePercent) > 5).length,
-      topLossName: primaryLoss?.ingredient ?? 'No dominant ingredient',
+      cogs: totalActualCost,
+      foodCostPct: percentage(totalActualCost, grossSales),
+      laborCostPct: percentage(actualCostByCategory.get('Labor') ?? 0, grossSales),
+      highRiskVarianceItems: matrixRows.filter((row) => row.variancePercent > 5).length,
+      topLossName: primaryLoss?.ingredient ?? 'No dominant category',
       topLossValue: primaryLoss?.monetaryVariance ?? 0,
-      warehouseInvoiceTotal,
-      accountantInvoiceTotal,
-      payrollTotal,
-      openAlertsCount,
+      idealTotal: totalIdealCost,
+      actualTotal: totalActualCost,
       topLossSources: fallbackLossSources,
     },
   });

@@ -57,16 +57,9 @@ function formatCompact(value: number): string {
   }).format(value);
 }
 
-function formatQty(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
 function varianceBadgeClass(variancePercent: number): string {
-  const abs = Math.abs(variancePercent);
-  if (abs > 8) return 'bg-red-600 text-white';
-  if (abs > 5) return 'bg-amber-500 text-white';
+  if (variancePercent > 5) return 'bg-red-600 text-white';
+  if (variancePercent > 0) return 'bg-amber-500 text-white';
   return 'bg-emerald-100 text-emerald-700';
 }
 
@@ -152,7 +145,9 @@ export function ExecutiveVarianceDashboard({
             <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-950 mt-1">
               Top Loss Sources
             </h2>
-            <p className="text-sm text-slate-500 mt-2">Top 5 ingredients driving the largest financial variance.</p>
+            <p className="text-sm text-slate-500 mt-2">
+              Top 5 categories driving the largest cost leakage.
+            </p>
           </div>
         </div>
 
@@ -202,14 +197,14 @@ export function ExecutiveVarianceDashboard({
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
-              Ingredient Efficiency Matrix
+              Cost Leakage Matrix
             </p>
             <h3 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-950 mt-1">
-              Ideal vs Actual Usage
+              Ideal Cost vs Actual Cost
             </h3>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
-            High-risk threshold: variance above 5%
+            High-risk threshold: actual cost above ideal by more than 5%
           </div>
         </div>
 
@@ -217,27 +212,21 @@ export function ExecutiveVarianceDashboard({
           <table className="w-full min-w-[980px]">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.16em] text-slate-500">
-                <th className="py-3 pr-3">Ingredient</th>
-                <th className="py-3 pr-3">Ideal Usage (Recipe)</th>
-                <th className="py-3 pr-3">Actual Usage (Inventory)</th>
-                <th className="py-3 pr-3">Variance Amount</th>
+                <th className="py-3 pr-3">Category</th>
+                <th className="py-3 pr-3">Ideal Cost</th>
+                <th className="py-3 pr-3">Actual Cost</th>
+                <th className="py-3 pr-3">Variance ($)</th>
                 <th className="py-3 pr-3">Variance %</th>
-                <th className="py-3 pr-0">Monetary Variance</th>
+                <th className="py-3 pr-0">Risk Level</th>
               </tr>
             </thead>
             <tbody>
               {matrixRows.map((row) => (
                 <tr key={row.ingredient} className="border-b border-slate-100">
                   <td className="py-4 pr-3 text-sm font-semibold text-slate-900">{row.ingredient}</td>
-                  <td className="py-4 pr-3 text-sm text-slate-700">
-                    {formatQty(row.idealUsage)} {row.unit}
-                  </td>
-                  <td className="py-4 pr-3 text-sm text-slate-700">
-                    {formatQty(row.actualUsage)} {row.unit}
-                  </td>
-                  <td className="py-4 pr-3 text-sm font-semibold text-slate-900">
-                    {formatQty(row.varianceAmount)} {row.unit}
-                  </td>
+                  <td className="py-4 pr-3 text-sm text-slate-700">{formatCurrency(row.idealUsage)}</td>
+                  <td className="py-4 pr-3 text-sm text-slate-700">{formatCurrency(row.actualUsage)}</td>
+                  <td className="py-4 pr-3 text-sm font-semibold text-slate-900">{formatCurrency(row.varianceAmount)}</td>
                   <td className="py-4 pr-3">
                     <span
                       className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${varianceBadgeClass(row.variancePercent)}`}
@@ -246,7 +235,7 @@ export function ExecutiveVarianceDashboard({
                     </span>
                   </td>
                   <td className="py-4 pr-0 text-sm font-semibold text-slate-900">
-                    {formatCurrency(row.monetaryVariance)}
+                    {row.variancePercent > 5 ? 'High Risk' : 'Normal'}
                   </td>
                 </tr>
               ))}

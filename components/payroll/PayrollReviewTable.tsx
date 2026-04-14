@@ -13,6 +13,7 @@ import {
   Search,
 } from 'lucide-react';
 import { formatNumberEn } from '@/lib/format/en';
+import { generatePayrollStatementPdf } from '@/components/payroll/payroll-statement-pdf';
 
 export type PayrollEmployee = {
   id: string;
@@ -154,6 +155,40 @@ export function PayrollReviewTable({
     return sum + (Number.isFinite(amount) ? amount : 0);
   }, 0);
   const remaining = Math.max(0, totalPayroll - paidSoFar);
+
+  const onDownloadPayrollPdf = () => {
+    const pdfRows = rows.map(({ employee, rec, dueAmount }) => {
+      const isPaid = Boolean(paidById[employee.id]);
+      const paidAmountRaw = Number(
+        amountById[employee.id] ?? dueAmount,
+      );
+      const paidAmount = Number.isFinite(paidAmountRaw)
+        ? paidAmountRaw
+        : 0;
+
+      const status = rec.status === 'terminated'
+        ? 'Terminated'
+        : isPaid
+          ? 'Paid'
+          : 'Unpaid';
+
+      return {
+        employee: employee.full_name,
+        baseSalary: dueAmount,
+        paidAmount,
+        status,
+      };
+    });
+
+    generatePayrollStatementPdf({
+      branchName,
+      periodLabel,
+      rows: pdfRows,
+      totalPayroll,
+      paidSoFar,
+      remaining,
+    });
+  };
 
   return (
     <div className="space-y-5 print:space-y-3" dir="ltr">
@@ -461,7 +496,7 @@ export function PayrollReviewTable({
       <div className="flex items-center justify-between gap-4 flex-wrap print:hidden">
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={onDownloadPayrollPdf}
           className="inline-flex items-center gap-2 bg-[#03153d] hover:bg-[#081f55] text-white rounded-full px-8 py-3.5 text-xl font-black shadow-lg"
         >
           <Download className="w-5 h-5" />

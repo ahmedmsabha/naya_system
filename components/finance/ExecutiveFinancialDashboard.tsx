@@ -1,15 +1,13 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  RadialBar,
-  RadialBarChart,
   ResponsiveContainer,
-  type TooltipProps,
   Tooltip,
   type TooltipPayloadEntry,
   XAxis,
@@ -32,12 +30,13 @@ type ExecutiveFinancialDashboardProps = {
   monthHrefNext: string;
   varianceHref: string;
   grossSales: number;
-  cogs: number;
-  laborCost: number;
-  opEx: number;
-  netProfit: number;
-  insights: string[];
+  totalDeductions: number;
+  netTotal: number;
+  operatingExpenses: number;
+  pnl: number;
   kpis: KpiCard[];
+  insights: string[];
+  pnlEntryTable: ReactNode;
 };
 
 type WaterfallRow = {
@@ -45,7 +44,6 @@ type WaterfallRow = {
   offset: number;
   amount: number;
   delta: number;
-  after: number;
   tone: 'positive' | 'negative' | 'total';
 };
 
@@ -62,41 +60,21 @@ function formatPct(value: number): string {
 }
 
 function toneClasses(tone: KpiCard['tone']): string {
-  if (tone === 'good')
-    return 'text-emerald-600 bg-emerald-50 border-emerald-200';
-  if (tone === 'warning')
-    return 'text-amber-600 bg-amber-50 border-amber-200';
-  return 'text-red-600 bg-red-50 border-red-200';
+  if (tone === 'good') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (tone === 'warning') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-red-200 bg-red-50 text-red-700';
 }
 
-function getWaterfallRows(
+function buildWaterfallRows(
   grossSales: number,
-  cogs: number,
-  laborCost: number,
-  opEx: number,
-  netProfit: number,
+  totalDeductions: number,
+  operatingExpenses: number,
+  pnl: number,
 ): WaterfallRow[] {
   const steps = [
-    {
-      label: 'Gross Sales',
-      delta: grossSales,
-      tone: 'positive' as const,
-    },
-    {
-      label: 'COGS',
-      delta: -cogs,
-      tone: 'negative' as const,
-    },
-    {
-      label: 'Labor',
-      delta: -laborCost,
-      tone: 'negative' as const,
-    },
-    {
-      label: 'OpEx',
-      delta: -opEx,
-      tone: 'negative' as const,
-    },
+    { label: 'Gross Sales', delta: grossSales, tone: 'positive' as const },
+    { label: 'Deductions', delta: -Math.abs(totalDeductions), tone: 'negative' as const },
+    { label: 'Operating Expenses', delta: -Math.abs(operatingExpenses), tone: 'negative' as const },
   ];
 
   let running = 0;
@@ -109,7 +87,6 @@ function getWaterfallRows(
       offset: Math.min(before, after),
       amount: Math.abs(step.delta),
       delta: step.delta,
-      after,
       tone: step.tone,
     };
   });
@@ -117,9 +94,8 @@ function getWaterfallRows(
   rows.push({
     label: 'Net Profit',
     offset: 0,
-    amount: Math.abs(netProfit),
-    delta: netProfit,
-    after: netProfit,
+    amount: Math.abs(pnl),
+    delta: pnl,
     tone: 'total',
   });
 
@@ -134,40 +110,32 @@ export function ExecutiveFinancialDashboard({
   monthHrefNext,
   varianceHref,
   grossSales,
-  cogs,
-  laborCost,
-  opEx,
-  netProfit,
-  insights,
+  totalDeductions,
+  netTotal,
+  operatingExpenses,
+  pnl,
   kpis,
+  insights,
+  pnlEntryTable,
 }: ExecutiveFinancialDashboardProps) {
-  const gaugeTooltipFormatter: NonNullable<
-    TooltipProps['formatter']
-  > = (value) => formatPct(Number(value));
+  const waterfallRows = buildWaterfallRows(grossSales, totalDeductions, operatingExpenses, pnl);
 
-  const waterfallTooltipFormatter: NonNullable<
-    TooltipProps['formatter']
-  > = (value, key, item) => {
-    const payloadEntry = item as TooltipPayloadEntry;
-    const row = payloadEntry.payload as WaterfallRow | undefined;
+  const waterfallTooltipFormatter = (
+    value: unknown,
+    key: unknown,
+    item: TooltipPayloadEntry,
+  ) => {
+    const row = item.payload as WaterfallRow | undefined;
     if (key === 'amount' && row) {
       return [formatCurrency(Math.abs(row.delta)), row.label];
     }
-    return [formatCurrency(Number(value)), String(key)];
+    return [formatCurrency(Number(value ?? 0)), String(key)];
   };
 
-  const waterfallRows = getWaterfallRows(
-    grossSales,
-    cogs,
-    laborCost,
-    opEx,
-    netProfit,
-  );
-
   return (
-    <section className="space-y-6" dir="ltr">
+    <section className="space-y-7" dir="ltr">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="inline-flex items-center rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="inline-flex items-center rounded-2xl border border-slate-200/80 bg-white p-1 shadow-sm">
           <Link
             href={monthHrefPrev}
             className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-900"
@@ -186,15 +154,13 @@ export function ExecutiveFinancialDashboard({
         </div>
 
         <div className="text-right">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
+          <p className="text-xs uppercase tracking-[0.22em] text-slate-500 font-semibold">
             Executive BI Dashboard
           </p>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-950 mt-1">
             {branchName}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {selectedPeriod}
-          </p>
+          <p className="text-sm text-slate-500 mt-1">{selectedPeriod}</p>
           <Link
             href={varianceHref}
             className="mt-3 inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold tracking-wide text-slate-900 hover:bg-slate-50"
@@ -204,90 +170,64 @@ export function ExecutiveFinancialDashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 xl:grid-cols-4 gap-5">
         {kpis.map((kpi) => (
           <article
             key={kpi.label}
-            className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_6px_24px_rgba(15,23,42,0.06)]"
+            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
-                  {kpi.label}
-                </p>
-                <p className="text-4xl font-semibold tracking-tight text-slate-950 mt-2">
-                  {formatPct(kpi.value)}
-                </p>
-                <p className="text-sm text-slate-500 mt-2">
-                  {kpi.description}
-                </p>
-              </div>
-              <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${toneClasses(kpi.tone)}`}
-              >
-                Target {formatPct(kpi.target)}
-              </span>
-            </div>
-
-            <div className="h-40 mt-3">
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <RadialBarChart
-                  data={[
-                    {
-                      value: Math.max(
-                        0,
-                        Math.min(100, kpi.value),
-                      ),
-                    },
-                  ]}
-                  cx="50%"
-                  cy="55%"
-                  innerRadius="65%"
-                  outerRadius="100%"
-                  startAngle={180}
-                  endAngle={0}
-                  barSize={12}
-                >
-                  <RadialBar
-                    dataKey="value"
-                    cornerRadius={12}
-                    fill="#0f172a"
-                  />
-                  <Tooltip
-                    formatter={gaugeTooltipFormatter}
-                    contentStyle={{
-                      borderRadius: 12,
-                      border: '1px solid #e2e8f0',
-                      fontSize: 12,
-                    }}
-                  />
-                </RadialBarChart>
-              </ResponsiveContainer>
-            </div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
+              {kpi.label}
+            </p>
+            <p className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">
+              {formatPct(kpi.value)}
+            </p>
+            <p className="mt-2 text-sm text-slate-500">{kpi.description}</p>
+            <span
+              className={`mt-4 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${toneClasses(
+                kpi.tone,
+              )}`}
+            >
+              Target {formatPct(kpi.target)}
+            </span>
           </article>
         ))}
-      </div>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+        <section className="xl:col-span-1 rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
+            AI Financial Commentary
+          </p>
+          <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
+            Executive Insights
+          </h3>
+          <div className="mt-4 space-y-2">
+            {insights.map((sentence, index) => (
+              <article
+                key={`${sentence}-${index}`}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800"
+              >
+                {sentence}
+              </article>
+            ))}
+          </div>
+        </section>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 shadow-[0_14px_35px_rgba(15,23,42,0.1)]">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
-              Profit Bridge
+              Waterfall View
             </p>
             <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-950 mt-1">
-              Waterfall: Gross Sales to Net Profit
+              Gross Sales to Net Profit
             </h2>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">
-              Net Profit
+              Net Total
             </p>
-            <p className="text-2xl font-semibold text-slate-950 mt-1">
-              {formatCurrency(netProfit)}
-            </p>
+            <p className="text-xl font-semibold text-emerald-700 mt-1">{formatCurrency(netTotal)}</p>
           </div>
         </div>
 
@@ -295,28 +235,18 @@ export function ExecutiveFinancialDashboard({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={waterfallRows}
-              margin={{
-                left: 4,
-                right: 18,
-                top: 12,
-                bottom: 0,
-              }}
+              margin={{ left: 4, right: 16, top: 12, bottom: 0 }}
             >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#e2e8f0"
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis
                 dataKey="label"
                 stroke="#64748b"
-                tick={{ fontSize: 12, fontWeight: 500 }}
+                tick={{ fontSize: 12, fontWeight: 600 }}
               />
               <YAxis
                 stroke="#64748b"
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) =>
-                  `$${Number(value) / 1000}k`
-                }
+                tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`}
               />
               <Tooltip
                 formatter={waterfallTooltipFormatter}
@@ -327,16 +257,8 @@ export function ExecutiveFinancialDashboard({
                   fontSize: 12,
                 }}
               />
-              <Bar
-                dataKey="offset"
-                stackId="waterfall"
-                fill="transparent"
-              />
-              <Bar
-                dataKey="amount"
-                stackId="waterfall"
-                radius={[8, 8, 0, 0]}
-              >
+              <Bar dataKey="offset" stackId="waterfall" fill="transparent" />
+              <Bar dataKey="amount" stackId="waterfall" radius={[8, 8, 0, 0]}>
                 {waterfallRows.map((row) => (
                   <Cell
                     key={row.label}
@@ -355,23 +277,16 @@ export function ExecutiveFinancialDashboard({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
-          AI Financial Commentary
-        </p>
-        <h3 className="text-2xl font-semibold tracking-tight text-slate-950 mt-1">
-          Executive Insights
-        </h3>
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          {insights.map((sentence, index) => (
-            <article
-              key={`${sentence}-${index}`}
-              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-800"
-            >
-              {sentence}
-            </article>
-          ))}
+      <section className="rounded-[30px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-6 md:p-8 shadow-[0_16px_40px_rgba(15,23,42,0.1)]">
+        <div className="mb-5">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
+            Monthly P&L Ledger
+          </p>
+          <h3 className="text-2xl font-semibold tracking-tight text-slate-950 mt-1">
+            Expense Entry and Receipt Control
+          </h3>
         </div>
+        {pnlEntryTable}
       </section>
     </section>
   );
