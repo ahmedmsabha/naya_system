@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getWeekDatesForDate, parseWarehouseIsoDate, type WeekdayKey } from "@/lib/warehouse/week-dates";
 
 // ─── Inventory Items ────────────────────────────────────────────────────────
 
@@ -215,6 +216,100 @@ export async function resetDistributions(formData: FormData) {
 
 // ─── Invoices ───────────────────────────────────────────────────────────────
 
+const WEEK_DAYS: WeekdayKey[] = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+];
+
+function buildWeeklyInvoiceNumber(branchId: string, weekStartIso: string) {
+  const hash = branchId.replace(/-/g, "").slice(0, 6).toUpperCase();
+  const compactWeek = weekStartIso.replace(/-/g, "");
+  return `NF-${hash}-${compactWeek}`;
+}
+
+type WeeklyIngredientTotals = {
+  ingredient_id: string;
+  quantity: number;
+  unit_cost: number;
+};
+
+async function buildWeeklyInvoiceSnapshot(
+  branchId: string,
+  anchorDateIso: string
+): Promise<{
+  weekStartIso: string;
+  weekEndIso: string;
+  invoiceItems: WeeklyIngredientTotals[];
+  totalAmount: number;
+}> {
+  const supabase = await createClient();
+  const weekDates = getWeekDatesForDate(anchorDateIso);
+  const weekStartIso = weekDates.MONDAY;
+  const weekEndIso = weekDates.SUNDAY;
+
+  const dateToDayKey: Record<string, WeekdayKey> = WEEK_DAYS.reduce((map, day) => {
+    map[weekDates[day]] = day;
+    return map;
+  }, {} as Record<string, WeekdayKey>);
+
+  const { data: distRows, error: distError } = await supabase
+    .from("warehouse_distributions")
+    .select("ingredient_id, quantity, distributed_at")
+    .eq("branch_id", branchId)
+    .gte("distributed_at", weekStartIso)
+    .lte("distributed_at", weekEndIso)
+    .gt("quantity", 0);
+
+  if (distError) {
+    throw new Error(distError.message);
+  }
+
+  const totalsByIngredient = new Map<string, number>();
+  for (const row of distRows ?? []) {
+    if (!dateToDayKey[row.distributed_at]) continue;
+    const prev = totalsByIngredient.get(row.ingredient_id) ?? 0;
+    totalsByIngredient.set(row.ingredient_id, prev + Number(row.quantity ?? 0));
+  }
+
+  if (totalsByIngredient.size === 0) {
+    return { weekStartIso, weekEndIso, invoiceItems: [], totalAmount: 0 };
+  }
+
+  const ingredientIds = Array.from(totalsByIngredient.keys());
+  const { data: ingredientRows, error: ingredientError } = await supabase
+    .from("ingredients")
+    .select("id, cost_per_unit")
+    .in("id", ingredientIds);
+
+  if (ingredientError) {
+    throw new Error(ingredientError.message);
+  }
+
+  const costByIngredientId: Record<string, number> = {};
+  for (const ingredient of ingredientRows ?? []) {
+    costByIngredientId[ingredient.id] = Number(ingredient.cost_per_unit ?? 0);
+  }
+
+  const invoiceItems: WeeklyIngredientTotals[] = ingredientIds
+    .map((ingredientId) => {
+      const quantity = Number(totalsByIngredient.get(ingredientId) ?? 0);
+      return {
+        ingredient_id: ingredientId,
+        quantity,
+        unit_cost: costByIngredientId[ingredientId] ?? 0,
+      };
+    })
+    .filter((row) => row.quantity > 0);
+
+  const totalAmount = invoiceItems.reduce((sum, row) => sum + row.quantity * row.unit_cost, 0);
+  return { weekStartIso, weekEndIso, invoiceItems, totalAmount };
+}
+
 export async function deleteArchivedInvoice(formData: FormData) {
   const supabase = await createClient();
   const invoiceId = formData.get("invoice_id") as string;
@@ -230,93 +325,191 @@ export async function deleteArchivedInvoice(formData: FormData) {
   return { success: true };
 }
 
-export async function archiveInvoice(formData: FormData) {
+/**
+ * Creates or updates one weekly invoice (Mon-Sun) for a branch.
+ * If a weekly invoice already exists (including archived), it is recalculated in-place.
+ */
+export async function upsertWeeklyInvoice(formData: FormData) {
   const supabase = await createClient();
-  const branchId = formData.get("branch_id") as string;
-  const purchaseDate = (formData.get("purchase_date") as string) || new Date().toISOString().split("T")[0];
+  const branchId = String(formData.get("branch_id") ?? "");
+  const requestedStatusRaw = String(formData.get("status") ?? "");
+  const requestedStatus = requestedStatusRaw || "pending";
+  const forceArchived = String(formData.get("force_archived") ?? "") === "true";
+  const anchorDateRaw =
+    String(formData.get("anchor_date") ?? "") ||
+    String(formData.get("purchase_date") ?? "") ||
+    String(formData.get("date") ?? "");
+  const anchorDateIso = parseWarehouseIsoDate(anchorDateRaw);
+
+  if (!branchId) return { error: "Missing branch_id" };
 
   try {
-    // 1. Snapshot current inventoryByDate for the selected purchase date.
-    const { data: distRows } = await supabase
-      .from("warehouse_distributions")
-      .select("ingredient_id, quantity")
-      .eq("branch_id", branchId)
-      .eq("distributed_at", purchaseDate)
-      .gt("quantity", 0);
-
-    if (!distRows || distRows.length === 0) {
-      return { error: "No purchases found for the selected date." };
-    }
-
-    // 2. Load unit costs for all involved ingredients
-    const ingredientIds = distRows.map((r) => r.ingredient_id);
-    const { data: ingRows } = await supabase
-      .from("ingredients")
-      .select("id, cost_per_unit")
-      .in("id", ingredientIds);
-
-    const costById: Record<string, number> = {};
-    for (const r of ingRows ?? []) {
-      costById[r.id] = Number(r.cost_per_unit ?? 0);
-    }
-
-    // 3. Compute total
-    const totalAmount = distRows.reduce(
-      (sum, r) => sum + Number(r.quantity) * (costById[r.ingredient_id] ?? 0),
-      0
+    const { weekStartIso, weekEndIso, invoiceItems, totalAmount } = await buildWeeklyInvoiceSnapshot(
+      branchId,
+      anchorDateIso
     );
 
-    // 4. Create invoice record with the purchase date as the billing date
-    const hash = branchId.replace(/-/g, "").slice(0, 6).toUpperCase();
-    const invoiceNumber = `NF-${hash}-${Date.now().toString().slice(-4)}`;
+    if (invoiceItems.length === 0) {
+      return { error: "No purchases found for the selected week." };
+    }
 
-    const { data: newInvoice, error: createError } = await supabase
+    const { data: weeklyInvoices, error: fetchInvoiceError } = await supabase
       .from("warehouse_invoices")
-      .insert({
-        branch_id: branchId,
-        invoice_number: invoiceNumber,
-        total_amount: totalAmount,
-        billing_period_start: purchaseDate,
-        billing_period_end: purchaseDate,
-        status: "archived",
-      })
-      .select()
-      .single();
+      .select("id, invoice_number, status, created_at")
+      .eq("branch_id", branchId)
+      .eq("billing_period_start", weekStartIso)
+      .eq("billing_period_end", weekEndIso)
+      .order("created_at", { ascending: false });
 
-    if (createError) throw new Error(createError.message);
+    if (fetchInvoiceError) {
+      throw new Error(fetchInvoiceError.message);
+    }
 
-    // 5. Save line items
-    const lineRows = distRows
-      .map((r) => {
-        const unitCost = costById[r.ingredient_id] ?? 0;
-        if (Number(r.quantity) <= 0) return null;
-        return {
-          invoice_id: newInvoice.id,
-          ingredient_id: r.ingredient_id,
-          quantity: Number(r.quantity),
-          unit_cost: unitCost,
-        };
-      })
-      .filter(Boolean) as Array<{
-      invoice_id: string;
-      ingredient_id: string;
-      quantity: number;
-      unit_cost: number;
-    }>;
+    const [keptInvoice, ...duplicateInvoices] = weeklyInvoices ?? [];
+    if (duplicateInvoices.length > 0) {
+      const duplicateIds = duplicateInvoices.map((inv) => inv.id);
+      const { error: dupItemsDeleteError } = await supabase
+        .from("warehouse_invoice_items")
+        .delete()
+        .in("invoice_id", duplicateIds);
+      if (dupItemsDeleteError) throw new Error(dupItemsDeleteError.message);
 
-    if (lineRows.length) {
-      const { error: itemsError } = await supabase.from("warehouse_invoice_items").insert(lineRows);
-      if (itemsError) throw new Error(itemsError.message);
+      const { error: dupInvoicesDeleteError } = await supabase
+        .from("warehouse_invoices")
+        .delete()
+        .in("id", duplicateIds);
+      if (dupInvoicesDeleteError) throw new Error(dupInvoicesDeleteError.message);
+    }
+
+    let invoiceId: string;
+    if (keptInvoice?.id) {
+      const nextStatus = forceArchived
+        ? "archived"
+        : keptInvoice.status === "archived"
+        ? "archived"
+        : requestedStatus || keptInvoice.status || "pending";
+      const { error: updateInvoiceError } = await supabase
+        .from("warehouse_invoices")
+        .update({
+          total_amount: totalAmount,
+          status: nextStatus,
+        })
+        .eq("id", keptInvoice.id);
+      if (updateInvoiceError) throw new Error(updateInvoiceError.message);
+      invoiceId = keptInvoice.id;
+    } else {
+      const invoiceNumber = buildWeeklyInvoiceNumber(branchId, weekStartIso);
+      const { data: newInvoice, error: createInvoiceError } = await supabase
+        .from("warehouse_invoices")
+        .insert({
+          branch_id: branchId,
+          invoice_number: invoiceNumber,
+          total_amount: totalAmount,
+          billing_period_start: weekStartIso,
+          billing_period_end: weekEndIso,
+          status: forceArchived ? "archived" : requestedStatus,
+        })
+        .select("id")
+        .single();
+
+      if (createInvoiceError?.code === "23505") {
+        const { data: conflictInvoice, error: conflictFetchError } = await supabase
+          .from("warehouse_invoices")
+          .select("id, status")
+          .eq("branch_id", branchId)
+          .eq("billing_period_start", weekStartIso)
+          .eq("billing_period_end", weekEndIso)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (conflictFetchError || !conflictInvoice?.id) {
+          throw new Error(conflictFetchError?.message ?? "Failed to resolve weekly invoice conflict");
+        }
+
+        const conflictStatus = forceArchived
+          ? "archived"
+          : conflictInvoice.status === "archived"
+          ? "archived"
+          : requestedStatus || conflictInvoice.status || "pending";
+        const { error: conflictUpdateError } = await supabase
+          .from("warehouse_invoices")
+          .update({
+            total_amount: totalAmount,
+            status: conflictStatus,
+          })
+          .eq("id", conflictInvoice.id);
+        if (conflictUpdateError) throw new Error(conflictUpdateError.message);
+        invoiceId = conflictInvoice.id;
+      } else if (createInvoiceError || !newInvoice?.id) {
+        throw new Error(createInvoiceError?.message ?? "Failed to create weekly invoice");
+      } else {
+        invoiceId = newInvoice.id;
+      }
+    }
+
+    const { error: deleteItemsError } = await supabase
+      .from("warehouse_invoice_items")
+      .delete()
+      .eq("invoice_id", invoiceId);
+    if (deleteItemsError) throw new Error(deleteItemsError.message);
+
+    const nextItemRows = invoiceItems.map((row) => ({
+      invoice_id: invoiceId,
+      ingredient_id: row.ingredient_id,
+      quantity: row.quantity,
+      unit_cost: row.unit_cost,
+    }));
+
+    if (nextItemRows.length > 0) {
+      const { error: insertItemsError } = await supabase.from("warehouse_invoice_items").insert(nextItemRows);
+      if (insertItemsError) throw new Error(insertItemsError.message);
     }
 
     revalidatePath(`/branch/${branchId}/warehouse`);
     revalidatePath(`/branch/${branchId}/warehouse/invoice`);
     revalidatePath(`/branch/${branchId}/warehouse/archive`);
     revalidatePath(`/branch/${branchId}/warehouse/schedule`);
+    return {
+      success: true,
+      invoice_id: invoiceId,
+      billing_period_start: weekStartIso,
+      billing_period_end: weekEndIso,
+    };
   } catch (error) {
     console.error("Archive Error:", error);
     return { error: error instanceof Error ? error.message : "Unknown archive failure" };
   }
+}
 
+/**
+ * Explicit archiving endpoint for weekly invoices.
+ * Ensures invoice exists for the week, recalculates current totals/items, then marks status archived.
+ */
+export async function archiveWeeklyInvoice(formData: FormData) {
+  const branchId = String(formData.get("branch_id") ?? "");
+  if (!branchId) return { error: "Missing branch_id" };
+
+  const fd = new FormData();
+  fd.set("branch_id", branchId);
+  fd.set("status", "archived");
+  fd.set("force_archived", "true");
+
+  const anchorDateRaw =
+    String(formData.get("anchor_date") ?? "") ||
+    String(formData.get("purchase_date") ?? "") ||
+    String(formData.get("date") ?? "");
+  if (anchorDateRaw) {
+    fd.set("anchor_date", anchorDateRaw);
+  }
+
+  return upsertWeeklyInvoice(fd);
+}
+
+export async function archiveInvoice(formData: FormData) {
+  const branchId = String(formData.get("branch_id") ?? "");
+  if (!branchId) return { error: "Missing branch_id" };
+
+  const result = await archiveWeeklyInvoice(formData);
+  if (result?.error) return result;
   redirect(`/branch/${branchId}/warehouse/archive`);
 }

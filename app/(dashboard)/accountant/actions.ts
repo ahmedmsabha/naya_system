@@ -82,7 +82,7 @@ export async function uploadReceipt(file: File) {
   const fileName = `${Date.now()}-${file.name}`;
   
   // 1. Upload to Supabase Storage
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from("receipts")
     .upload(fileName, file);
 

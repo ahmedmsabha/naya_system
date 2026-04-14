@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
-import { BranchFinancialIntelligence } from '@/components/finance/BranchFinancialIntelligence';
+import { ExecutiveFinancialDashboard } from '@/components/finance/ExecutiveFinancialDashboard';
+import { generateFinancialCommentary } from '@/lib/ai/financial-commentary';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,18 @@ function addMonths(period: string, delta: number): string {
   const d = new Date(`${period}-01T12:00:00`);
   d.setMonth(d.getMonth() + delta);
   return monthKeyFromDate(d);
+}
+
+function percentage(value: number, total: number): number {
+  if (total <= 0) return 0;
+  return (value / total) * 100;
+}
+
+function normalizeIngredient(
+  ingredient: { name?: string | null; cost_per_unit?: number | null } | Array<{ name?: string | null; cost_per_unit?: number | null }> | null,
+) {
+  if (!ingredient) return null;
+  return Array.isArray(ingredient) ? ingredient[0] : ingredient;
 }
 
 export default async function BranchFinancialsPage({
@@ -56,204 +69,226 @@ export default async function BranchFinancialsPage({
 
   if (!branch) notFound();
 
-  const { data: supplierRows } = await supabase
-    .from('suppliers')
-    .select('id, name')
-    .order('created_at', { ascending: false })
-    .limit(100);
-
-  const { data: invoiceRowsCurrent } = await supabase
-    .from('warehouse_invoices')
-    .select('id, total_amount')
+  const { data: salesRowsCurrent } = await supabase
+    .from('sales')
+    .select('recipe_id, quantity_sold, total_revenue')
     .eq('branch_id', id)
-    .gte('billing_period_start', selectedStart)
-    .lte('billing_period_start', selectedEnd);
+    .gte('sale_date', selectedStart)
+    .lte('sale_date', selectedEnd);
 
-  const { data: invoiceRowsPrevious } = await supabase
-    .from('warehouse_invoices')
-    .select('total_amount')
+  const { data: salesRowsPrevious } = await supabase
+    .from('sales')
+    .select('recipe_id, quantity_sold, total_revenue')
     .eq('branch_id', id)
-    .gte('billing_period_start', previousStart)
-    .lte('billing_period_start', previousEnd);
-
-  const { data: vendorInvoiceRowsCurrent } = await supabase
-    .from('tarek_invoices')
-    .select('vendor_name, amount, created_at')
-    .gte('created_at', `${selectedStart}T00:00:00`)
-    .lte('created_at', `${selectedEnd}T23:59:59`);
-
-  const { data: vendorInvoiceRowsPrevious } = await supabase
-    .from('tarek_invoices')
-    .select('vendor_name, amount, created_at')
-    .gte('created_at', `${previousStart}T00:00:00`)
-    .lte('created_at', `${previousEnd}T23:59:59`);
-
-  const warehouseCurrent = (invoiceRowsCurrent ?? []).reduce(
-    (sum, row) => sum + (Number(row.total_amount) || 0),
-    0,
-  );
-  const warehousePrevious = (invoiceRowsPrevious ?? []).reduce(
-    (sum, row) => sum + (Number(row.total_amount) || 0),
-    0,
-  );
-
-  const invoiceIds = (invoiceRowsCurrent ?? []).map((row) => String(row.id));
-  const { data: itemRowsCurrent } =
-    invoiceIds.length > 0
-      ? await supabase
-          .from('warehouse_invoice_items')
-          .select('amount, ingredients(name)')
-          .in('invoice_id', invoiceIds)
-      : { data: [] };
+    .gte('sale_date', previousStart)
+    .lte('sale_date', previousEnd);
 
   const { data: distributionRowsCurrent } = await supabase
     .from('warehouse_distributions')
-    .select('quantity, ingredients(cost_per_unit)')
+    .select('ingredient_id, quantity, ingredients(name, cost_per_unit)')
     .eq('branch_id', id)
     .gte('distributed_at', selectedStart)
     .lte('distributed_at', selectedEnd);
 
   const { data: distributionRowsPrevious } = await supabase
     .from('warehouse_distributions')
-    .select('quantity, ingredients(cost_per_unit)')
+    .select('ingredient_id, quantity, ingredients(name, cost_per_unit)')
     .eq('branch_id', id)
     .gte('distributed_at', previousStart)
     .lte('distributed_at', previousEnd);
 
-  const bucketTotals = new Map<string, number>();
-  for (const row of itemRowsCurrent ?? []) {
-    const ingredient = Array.isArray(row.ingredients)
-      ? row.ingredients[0]
-      : row.ingredients;
-    const label = String(ingredient?.name ?? 'Uncategorized');
-    bucketTotals.set(
-      label,
-      (bucketTotals.get(label) ?? 0) + (Number(row.amount) || 0),
-    );
+  const [
+    { data: warehouseInvoiceRows },
+    { data: accountantInvoiceRows },
+    { data: payrollRows },
+    { count: openAlertsCountRaw },
+    { data: qualityRows },
+    { count: checklistCountRaw },
+  ] = await Promise.all([
+    supabase
+      .from('warehouse_invoices')
+      .select('total_amount')
+      .eq('branch_id', id)
+      .gte('billing_period_start', selectedStart)
+      .lte('billing_period_end', selectedEnd),
+    supabase
+      .from('tarek_invoices')
+      .select('amount')
+      .gte('created_at', `${selectedStart}T00:00:00`)
+      .lte('created_at', `${selectedEnd}T23:59:59`),
+    supabase
+      .from('branch_staff')
+      .select('base_salary')
+      .eq('branch_id', id)
+      .eq('status', 'active'),
+    supabase
+      .from('alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('branch_id', id)
+      .eq('is_read', false),
+    supabase
+      .from('quality_feedback')
+      .select('food_score, service_score, cleanliness_score')
+      .eq('branch_id', id)
+      .gte('submitted_at', `${selectedStart}T00:00:00`)
+      .lte('submitted_at', `${selectedEnd}T23:59:59`),
+    supabase
+      .from('checklists')
+      .select('id', { count: 'exact', head: true })
+      .eq('branch_id', id)
+      .gte('submitted_at', `${selectedStart}T00:00:00`)
+      .lte('submitted_at', `${selectedEnd}T23:59:59`),
+  ]);
+
+  const allRecipeIds = Array.from(
+    new Set([
+      ...(salesRowsCurrent ?? []).map((row) => String(row.recipe_id)),
+      ...(salesRowsPrevious ?? []).map((row) => String(row.recipe_id)),
+    ]),
+  );
+
+  const { data: recipeItemsRows } =
+    allRecipeIds.length > 0
+      ? await supabase
+          .from('recipe_items')
+          .select('recipe_id, quantity_grams, ingredients(cost_per_unit)')
+          .in('recipe_id', allRecipeIds)
+      : { data: [] };
+
+  const recipeCost = new Map<string, number>();
+  for (const row of recipeItemsRows ?? []) {
+    const ingredient = normalizeIngredient(row.ingredients ?? null);
+    const ingredientCost = Number(ingredient?.cost_per_unit ?? 0) || 0;
+    const recipeId = String(row.recipe_id);
+    const quantity = Number(row.quantity_grams ?? 0) || 0;
+    recipeCost.set(recipeId, (recipeCost.get(recipeId) ?? 0) + quantity * ingredientCost);
   }
 
-  const topSpendTiles = Array.from(bucketTotals.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([label, amount], index) => ({
-      id: `${label}-${index}`,
-      label,
-      amount,
-    }));
-
-  const vendorTotalsCurrent = new Map<string, number>();
-  for (const row of vendorInvoiceRowsCurrent ?? []) {
-    const name = String(row.vendor_name ?? '').trim();
-    if (!name) continue;
-    const normalized = name.toLowerCase();
-    if (
-      normalized === 'ahmed' ||
-      normalized === 'أحمد' ||
-      normalized === 'احمد'
-    ) {
-      continue;
-    }
-    vendorTotalsCurrent.set(
-      name,
-      (vendorTotalsCurrent.get(name) ?? 0) + (Number(row.amount) || 0),
-    );
-  }
-
-  const vendorCostRows = Array.from(vendorTotalsCurrent.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, total], idx) => ({
-      id: `${name}-${idx}`,
-      name,
-      total,
-    }));
-
-  const invoiceVendors = vendorCostRows.map((row) => row.name);
-
-  const foodSupplyCurrent = (distributionRowsCurrent ?? []).reduce((sum, row) => {
-    const ingredient = Array.isArray(row.ingredients)
-      ? row.ingredients[0]
-      : row.ingredients;
-    const qty = Number(row.quantity ?? 0) || 0;
-    const cost = Number(ingredient?.cost_per_unit ?? 0) || 0;
-    return sum + qty * cost;
-  }, 0);
-  const foodSupplyPrevious = (distributionRowsPrevious ?? []).reduce((sum, row) => {
-    const ingredient = Array.isArray(row.ingredients)
-      ? row.ingredients[0]
-      : row.ingredients;
-    const qty = Number(row.quantity ?? 0) || 0;
-    const cost = Number(ingredient?.cost_per_unit ?? 0) || 0;
-    return sum + qty * cost;
-  }, 0);
-
-  const operationalFees = Math.max(0, warehouseCurrent - foodSupplyCurrent);
-  const deliveryFee = warehouseCurrent * 0.013;
-  const tax = warehouseCurrent * 0.03;
-  const serviceFees = warehouseCurrent * 0.031;
-  const marketing = warehouseCurrent * 0.008;
-  const necessaryCosts = warehouseCurrent * 0.02;
-  const vendorInvoiceTotal = vendorCostRows.reduce(
-    (sum, row) => sum + row.total,
+  const grossSales = (salesRowsCurrent ?? []).reduce(
+    (sum, row) => sum + (Number(row.total_revenue ?? 0) || 0),
     0,
   );
-  const netTotal =
-    foodSupplyCurrent +
-    operationalFees +
-    vendorInvoiceTotal +
-    marketing +
-    deliveryFee +
-    tax +
-    serviceFees +
-    necessaryCosts;
-  const netProfit = Math.max(0, netTotal * 0.18);
-  const marginPct =
-    netTotal > 0 ? (netProfit / netTotal) * 100 : 0;
-
-  const warehouseDelta = warehouseCurrent - warehousePrevious;
-  const foodDelta = foodSupplyCurrent - foodSupplyPrevious;
-  const vendorPreviousTotal = (vendorInvoiceRowsPrevious ?? []).reduce(
-    (sum, row) => {
-      const name = String(row.vendor_name ?? '').trim().toLowerCase();
-      if (name === 'ahmed' || name === 'أحمد' || name === 'احمد') {
-        return sum;
-      }
-      return sum + (Number(row.amount) || 0);
-    },
+  const previousGrossSales = (salesRowsPrevious ?? []).reduce(
+    (sum, row) => sum + (Number(row.total_revenue ?? 0) || 0),
     0,
   );
-  const vendorDelta = vendorInvoiceTotal - vendorPreviousTotal;
 
-  const insights = [
-    {
-      id: 'warehouse',
-      text:
-        warehouseDelta >= 0
-          ? `Operational spending increased by $${warehouseDelta.toFixed(2)} versus last month.`
-          : `Operational spending improved by $${Math.abs(warehouseDelta).toFixed(2)} versus last month.`,
+  const cogs = (salesRowsCurrent ?? []).reduce((sum, row) => {
+    const rc = recipeCost.get(String(row.recipe_id)) ?? 0;
+    const qty = Number(row.quantity_sold ?? 0) || 0;
+    return sum + rc * qty;
+  }, 0);
+  const previousCogs = (salesRowsPrevious ?? []).reduce((sum, row) => {
+    const rc = recipeCost.get(String(row.recipe_id)) ?? 0;
+    const qty = Number(row.quantity_sold ?? 0) || 0;
+    return sum + rc * qty;
+  }, 0);
+
+  const ingredientSpendCurrent = new Map<string, number>();
+  const ingredientSpendPrevious = new Map<string, number>();
+  const distributionCostCurrent = (distributionRowsCurrent ?? []).reduce((sum, row) => {
+    const ingredient = normalizeIngredient(row.ingredients ?? null);
+    const name = String(ingredient?.name ?? 'Uncategorized');
+    const qty = Number(row.quantity ?? 0) || 0;
+    const cost = Number(ingredient?.cost_per_unit ?? 0) || 0;
+    const spend = qty * cost;
+    ingredientSpendCurrent.set(name, (ingredientSpendCurrent.get(name) ?? 0) + spend);
+    return sum + spend;
+  }, 0);
+  const distributionCostPrevious = (distributionRowsPrevious ?? []).reduce((sum, row) => {
+    const ingredient = normalizeIngredient(row.ingredients ?? null);
+    const name = String(ingredient?.name ?? 'Uncategorized');
+    const qty = Number(row.quantity ?? 0) || 0;
+    const cost = Number(ingredient?.cost_per_unit ?? 0) || 0;
+    const spend = qty * cost;
+    ingredientSpendPrevious.set(name, (ingredientSpendPrevious.get(name) ?? 0) + spend);
+    return sum + spend;
+  }, 0);
+
+  const wastePressure = Math.max(0, distributionCostCurrent - cogs);
+  const previousWastePressure = Math.max(0, distributionCostPrevious - previousCogs);
+  const laborCost = grossSales * (0.22 + Math.min(0.08, percentage(wastePressure, grossSales) / 100));
+  const previousLaborCost =
+    previousGrossSales *
+    (0.22 + Math.min(0.08, percentage(previousWastePressure, previousGrossSales) / 100));
+
+  const opEx = grossSales * 0.15 + wastePressure * 0.35;
+  const previousOpEx = previousGrossSales * 0.15 + previousWastePressure * 0.35;
+
+  const netProfit = grossSales - cogs - laborCost - opEx;
+  const previousNetProfit = previousGrossSales - previousCogs - previousLaborCost - previousOpEx;
+
+  const netMargin = percentage(netProfit, grossSales);
+  const previousNetMargin = percentage(previousNetProfit, previousGrossSales);
+  const foodCostPct = percentage(cogs, grossSales);
+  const previousFoodCostPct = percentage(previousCogs, previousGrossSales);
+  const laborCostPct = percentage(laborCost, grossSales);
+  const opExPct = percentage(opEx, grossSales);
+
+  const topIngredientMove = Array.from(
+    new Set([...ingredientSpendCurrent.keys(), ...ingredientSpendPrevious.keys()]),
+  )
+    .map((name) => ({
+      name,
+      delta: (ingredientSpendCurrent.get(name) ?? 0) - (ingredientSpendPrevious.get(name) ?? 0),
+    }))
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0] ?? {
+    name: 'primary ingredients',
+    delta: 0,
+  };
+
+  const warehouseInvoiceTotal = (warehouseInvoiceRows ?? []).reduce(
+    (sum, row) => sum + (Number(row.total_amount ?? 0) || 0),
+    0,
+  );
+  const accountantInvoiceTotal = (accountantInvoiceRows ?? []).reduce(
+    (sum, row) => sum + (Number(row.amount ?? 0) || 0),
+    0,
+  );
+  const payrollTotal = (payrollRows ?? []).reduce(
+    (sum, row) => sum + (Number(row.base_salary ?? 0) || 0),
+    0,
+  );
+  const openAlertsCount = Number(openAlertsCountRaw ?? 0);
+  const checklistCount = Number(checklistCountRaw ?? 0);
+  const qualityAverage =
+    (qualityRows ?? []).length > 0
+      ? (qualityRows ?? []).reduce((sum, row) => {
+          const score = (Number(row.food_score ?? 0) + Number(row.service_score ?? 0) + Number(row.cleanliness_score ?? 0)) / 3;
+          return sum + score;
+        }, 0) / (qualityRows ?? []).length
+      : 0;
+
+  const insights = await generateFinancialCommentary({
+    focus: 'financial',
+    period: selectedPeriod,
+    branchName: String(branch.name ?? ''),
+    context: {
+      grossSales,
+      netProfit,
+      netMarginPct: netMargin,
+      cogs,
+      foodCostPct,
+      laborCost,
+      laborCostPct,
+      opEx,
+      opExPct,
+      previousGrossSales,
+      previousNetProfit,
+      previousNetMarginPct: previousNetMargin,
+      previousFoodCostPct,
+      distributionCostCurrent,
+      wastePressure,
+      topDriver: topIngredientMove.name,
+      topDriverDelta: topIngredientMove.delta,
+      warehouseInvoiceTotal,
+      accountantInvoiceTotal,
+      payrollTotal,
+      openAlertsCount,
+      checklistCount,
+      qualityAverage,
     },
-    {
-      id: 'food',
-      text:
-        foodDelta >= 0
-          ? `Food supply costs increased by $${foodDelta.toFixed(2)} versus last month.`
-          : `Food supply costs improved by $${Math.abs(foodDelta).toFixed(2)} versus last month.`,
-    },
-    {
-      id: 'fees',
-      text: `Current operations mix: food ${warehouseCurrent > 0 ? ((foodSupplyCurrent / warehouseCurrent) * 100).toFixed(1) : '0.0'}% and fees ${warehouseCurrent > 0 ? ((operationalFees / warehouseCurrent) * 100).toFixed(1) : '0.0'}%.`,
-    },
-    {
-      id: 'necessary',
-      text: `A required operations reserve of $${necessaryCosts.toFixed(2)} is included for hidden running costs.`,
-    },
-    {
-      id: 'vendors',
-      text:
-        vendorDelta >= 0
-          ? `Vendor invoice costs increased by $${vendorDelta.toFixed(2)} versus last month.`
-          : `Vendor invoice costs improved by $${Math.abs(vendorDelta).toFixed(2)} versus last month.`,
-    },
-  ];
+  });
 
   const monthLabel = new Date(
     `${selectedPeriod}-01T12:00:00`,
@@ -264,8 +299,7 @@ export default async function BranchFinancialsPage({
 
   return (
     <div className="w-full" dir="ltr">
-      <BranchFinancialIntelligence
-        branchId={id}
+      <ExecutiveFinancialDashboard
         branchName={String(branch.name ?? '').toUpperCase()}
         monthLabel={monthLabel}
         selectedPeriod={selectedPeriod}
@@ -273,36 +307,34 @@ export default async function BranchFinancialsPage({
         monthHrefNext={`/branch/${id}/financials?period=${addMonths(selectedPeriod, 1)}`}
         varianceHref={`/branch/${id}/financials/variance?period=${selectedPeriod}`}
         insights={insights}
-        metricCards={[
-          { label: 'Net Total', value: netTotal },
-          { label: 'Food Supplies', value: foodSupplyCurrent },
-          { label: 'Operational Fees', value: operationalFees },
-          { label: 'Vendor Invoices', value: vendorInvoiceTotal },
-          { label: 'Marketing', value: marketing },
-          { label: 'Delivery Fee', value: deliveryFee },
-          { label: 'Tax', value: tax },
-          { label: 'Service Fees', value: serviceFees },
-          { label: 'Necessary Costs', value: necessaryCosts },
-        ]}
-        topSpendTiles={
-          topSpendTiles.length > 0
-            ? topSpendTiles
-            : [
-                {
-                  id: 'empty-1',
-                  label: 'No invoice items for this period',
-                  amount: 0,
-                },
-              ]
-        }
-        invoiceVendors={invoiceVendors}
-        vendorCostRows={vendorCostRows}
-        suppliers={(supplierRows ?? []).map((row) => ({
-          id: String(row.id),
-          name: String(row.name ?? ''),
-        }))}
+        grossSales={grossSales}
+        cogs={cogs}
+        laborCost={laborCost}
+        opEx={opEx}
         netProfit={netProfit}
-        marginPct={marginPct}
+        kpis={[
+          {
+            label: 'Net Margin',
+            value: netMargin,
+            target: 18,
+            description: 'Net profit as a share of gross sales.',
+            tone: netMargin >= 18 ? 'good' : netMargin >= 12 ? 'warning' : 'danger',
+          },
+          {
+            label: 'Food Cost %',
+            value: foodCostPct,
+            target: 30,
+            description: 'Theoretical COGS from sales x recipe items.',
+            tone: foodCostPct <= 30 ? 'good' : foodCostPct <= 35 ? 'warning' : 'danger',
+          },
+          {
+            label: 'Labor Cost %',
+            value: laborCostPct,
+            target: 25,
+            description: 'Labor load adjusted by inventory pressure.',
+            tone: laborCostPct <= 25 ? 'good' : laborCostPct <= 30 ? 'warning' : 'danger',
+          },
+        ]}
       />
     </div>
   );
