@@ -332,8 +332,10 @@ export function MonthlyPnLTable({
                           multiple
                           className="hidden"
                           onChange={async (event) => {
-                            await onFileChange(row, event.target.files);
-                            event.currentTarget.value = '';
+                            const input = event.currentTarget;
+                            const files = input.files;
+                            input.value = '';
+                            await onFileChange(row, files);
                           }}
                         />
 
