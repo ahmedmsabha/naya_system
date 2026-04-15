@@ -101,3 +101,79 @@ ${contextJson}
     return fallbackCommentary(payload);
   }
 }
+
+type VendorCommentaryPayload = {
+  period: string;
+  branchName: string;
+  context: Record<string, unknown>;
+};
+
+function fallbackVendorCommentary(payload: VendorCommentaryPayload): string[] {
+  const highestVolatilityVendor = String(payload.context.highestVolatilityVendor ?? 'Top vendor');
+  const volatilityScore = toFinite(payload.context.volatilityScore);
+  const concentrationVendor = String(payload.context.concentrationVendor ?? 'Top vendor');
+  const concentrationPct = toFinite(payload.context.concentrationPct);
+  const forecastLiability = toFinite(payload.context.forecastLiability);
+
+  return [
+    `${highestVolatilityVendor} shows the highest spend volatility with a coefficient score of ${volatilityScore.toFixed(2)} over six months.`,
+    `Dependency on ${concentrationVendor} is ${concentrationPct.toFixed(1)}% of current-month spend, creating measurable concentration risk.`,
+    `Projected vendor liability for next month is $${forecastLiability.toFixed(0)} if the current six-month trajectory continues.`,
+  ];
+}
+
+export async function generateVendorSmartCommentary(
+  payload: VendorCommentaryPayload,
+): Promise<string[]> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) return fallbackVendorCommentary(payload);
+
+  const contextJson = JSON.stringify(payload.context, null, 2);
+  const prompt = `You are a board-level procurement and finance strategist for a restaurant group.
+
+Return exactly 3 short executive insights in English.
+Use only the provided metrics. Do not invent any number.
+
+Output format (strict JSON only):
+{
+  "insights": ["...", "...", "..."]
+}
+
+Rules:
+- Exactly 3 insights.
+- Each insight maximum 26 words.
+- Tone: concise, business-focused, and action-oriented.
+- No markdown, no bullets, no extra keys, no commentary.
+- Focus areas:
+  1) Price volatility (or spend volatility proxy if unit prices are unavailable)
+  2) Concentration risk (% of spend in top vendor)
+  3) Forecasted next-month liability
+
+Input:
+Period: ${payload.period}
+Branch: ${payload.branchName}
+
+Vendor Metrics JSON:
+${contextJson}
+`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text();
+    const cleaned = cleanModelText(raw);
+    const parsed = JSON.parse(cleaned) as { insights?: unknown };
+    if (!Array.isArray(parsed.insights)) return fallbackVendorCommentary(payload);
+
+    const insights = parsed.insights
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .slice(0, 3);
+
+    if (insights.length === 3 && parsed.insights.length === 3) return insights;
+    return fallbackVendorCommentary(payload);
+  } catch {
+    return fallbackVendorCommentary(payload);
+  }
+}

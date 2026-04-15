@@ -19,6 +19,12 @@ type VendorInvoiceRow = {
   createdAt: string;
 };
 
+type VendorTrendPoint = {
+  period: string;
+  label: string;
+  total: number;
+};
+
 function monthKeyFromDate(input: Date): string {
   return `${input.getFullYear()}-${String(input.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -44,6 +50,19 @@ function addMonths(period: string, delta: number): string {
   return monthKeyFromDate(d);
 }
 
+function shortMonthLabel(period: string): string {
+  const d = new Date(`${period}-01T12:00:00`);
+  return d.toLocaleDateString('en-US', { month: 'short' });
+}
+
+function monthSequence(period: string, months: number): string[] {
+  const sequence: string[] = [];
+  for (let i = months - 1; i >= 0; i -= 1) {
+    sequence.push(addMonths(period, -i));
+  }
+  return sequence;
+}
+
 export default async function BranchVendorsPage({
   params,
   searchParams,
@@ -59,6 +78,9 @@ export default async function BranchVendorsPage({
 
   const selectedStart = monthStartIso(selectedPeriod);
   const selectedEnd = monthEndIso(selectedPeriod);
+  const trendPeriods = monthSequence(selectedPeriod, 6);
+  const trendStart = monthStartIso(trendPeriods[0]);
+  const trendEnd = monthEndIso(selectedPeriod);
 
   const supabase = await createClient();
   const [{ data: branch }, { data: invoiceRows }] = await Promise.all([
@@ -67,16 +89,23 @@ export default async function BranchVendorsPage({
       .from('vendor_invoices')
       .select('id, vendor_name, invoice_date, amount, receipt_url, created_at')
       .eq('branch_id', id)
-      .gte('invoice_date', selectedStart)
-      .lte('invoice_date', selectedEnd)
+      .gte('invoice_date', trendStart)
+      .lte('invoice_date', trendEnd)
       .order('invoice_date', { ascending: false })
       .order('created_at', { ascending: false }),
   ]);
 
   if (!branch) notFound();
 
-  const initialInvoices: VendorInvoiceRow[] = (invoiceRows ?? [])
-    .filter((row) => VENDOR_PAYABLE_CATEGORIES.includes(row.vendor_name as VendorPayableCategory))
+  const vendorInvoices = (invoiceRows ?? []).filter((row) =>
+    VENDOR_PAYABLE_CATEGORIES.includes(row.vendor_name as VendorPayableCategory),
+  );
+
+  const initialInvoices: VendorInvoiceRow[] = vendorInvoices
+    .filter((row) => {
+      const invoiceDate = String(row.invoice_date);
+      return invoiceDate >= selectedStart && invoiceDate <= selectedEnd;
+    })
     .map((row) => ({
       id: String(row.id),
       vendorName: row.vendor_name as VendorPayableCategory,
@@ -92,6 +121,34 @@ export default async function BranchVendorsPage({
 
   for (const invoice of initialInvoices) {
     monthlyTotals[invoice.vendorName] += invoice.amount;
+  }
+
+  const vendorTrendSeries = Object.fromEntries(
+    VENDOR_PAYABLE_CATEGORIES.map((vendor) => [
+      vendor,
+      trendPeriods.map((period) => ({
+        period,
+        label: shortMonthLabel(period),
+        total: 0,
+      })),
+    ]),
+  ) as Record<VendorPayableCategory, VendorTrendPoint[]>;
+
+  for (const row of vendorInvoices) {
+    const vendor = row.vendor_name as VendorPayableCategory;
+    const invoiceDate = String(row.invoice_date);
+    const period = invoiceDate.slice(0, 7);
+    const points = vendorTrendSeries[vendor];
+    const point = points.find((item) => item.period === period);
+    if (!point) continue;
+    point.total += Number(row.amount ?? 0) || 0;
+  }
+
+  for (const vendor of VENDOR_PAYABLE_CATEGORIES) {
+    vendorTrendSeries[vendor] = vendorTrendSeries[vendor].map((point) => ({
+      ...point,
+      total: Number(point.total.toFixed(2)),
+    }));
   }
 
   const monthLabel = new Date(`${selectedPeriod}-01T12:00:00`).toLocaleDateString('en-US', {
@@ -139,6 +196,7 @@ export default async function BranchVendorsPage({
         monthLabel={monthLabel}
         initialInvoices={initialInvoices}
         initialMonthlyTotals={monthlyTotals}
+        trendSeriesByVendor={vendorTrendSeries}
       />
     </div>
   );

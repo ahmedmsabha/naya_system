@@ -1,17 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import {
+  ArrowUpRight,
   Building2,
   CalendarClock,
+  Download,
   Eye,
   Loader2,
   Plus,
+  Receipt,
   ReceiptText,
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -19,7 +23,17 @@ import {
   VENDOR_PAYABLE_CATEGORIES,
   type VendorPayableCategory,
 } from '@/lib/finance/monthly-pnl';
-import { addVendorInvoiceAction, deleteVendorInvoiceAction } from '@/app/(dashboard)/branch/[id]/vendors/actions';
+import {
+  addVendorInvoiceAction,
+  attachVendorInvoiceReceiptAction,
+  deleteVendorInvoiceAction,
+  getVendorSmartAnalysisAction,
+} from '@/app/(dashboard)/branch/[id]/vendors/actions';
+import {
+  VendorSmartAnalysis,
+  type VendorSmartAnalysisData,
+} from '@/components/finance/VendorSmartAnalysis';
+import { exportVendorReportPDF } from '@/lib/finance/VendorReportPDF';
 
 type VendorInvoiceRow = {
   id: string;
@@ -30,6 +44,14 @@ type VendorInvoiceRow = {
   createdAt: string;
 };
 
+type VendorTrendPoint = {
+  period: string;
+  label: string;
+  total: number;
+};
+
+type SmartStatus = 'Under Budget' | 'Trend Rising' | 'Critical Increase';
+
 type VendorsDashboardProps = {
   branchId: string;
   branchName: string;
@@ -37,6 +59,7 @@ type VendorsDashboardProps = {
   monthLabel: string;
   initialInvoices: VendorInvoiceRow[];
   initialMonthlyTotals: Record<VendorPayableCategory, number>;
+  trendSeriesByVendor: Record<VendorPayableCategory, VendorTrendPoint[]>;
 };
 
 function formatCurrency(value: number): string {
@@ -74,6 +97,20 @@ function periodEnd(period: string): string {
   return `${period}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function getSmartStatus(current: number, previous: number): SmartStatus {
+  if (previous <= 0) return current > 0 ? 'Trend Rising' : 'Under Budget';
+  const changePct = ((current - previous) / previous) * 100;
+  if (changePct >= 15) return 'Critical Increase';
+  if (changePct > 0) return 'Trend Rising';
+  return 'Under Budget';
+}
+
+function getStatusStyle(status: SmartStatus): string {
+  if (status === 'Under Budget') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'Trend Rising') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-rose-200 bg-rose-50 text-rose-700';
+}
+
 export function VendorsDashboard({
   branchId,
   branchName,
@@ -81,6 +118,7 @@ export function VendorsDashboard({
   monthLabel,
   initialInvoices,
   initialMonthlyTotals,
+  trendSeriesByVendor,
 }: VendorsDashboardProps) {
   const [invoices, setInvoices] = useState<VendorInvoiceRow[]>(initialInvoices);
   const [activeVendor, setActiveVendor] = useState<VendorPayableCategory | null>(null);
@@ -89,7 +127,17 @@ export function VendorsDashboard({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isSubmittingInvoice, startSubmitTransition] = useTransition();
+  const [isDeletingInvoice, startDeleteTransition] = useTransition();
+  const [isUploadingReceipt, startUploadTransition] = useTransition();
+  const [isGeneratingSmartReport, startSmartReportTransition] = useTransition();
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
+  const [uploadingInvoiceId, setUploadingInvoiceId] = useState<string | null>(null);
+  const [isSmartAnalysisOpen, setIsSmartAnalysisOpen] = useState(false);
+  const [smartAnalysisData, setSmartAnalysisData] = useState<VendorSmartAnalysisData | null>(null);
+  const [smartAnalysisError, setSmartAnalysisError] = useState<string | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const uploadInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const minDate = periodStart(selectedPeriod);
   const maxDate = periodEnd(selectedPeriod);
@@ -126,6 +174,34 @@ export function VendorsDashboard({
     return map;
   }, [invoices]);
 
+  const tableInvoices = useMemo(
+    () =>
+      [...invoices].sort((a, b) => {
+        const byDate = b.invoiceDate.localeCompare(a.invoiceDate);
+        if (byDate !== 0) return byDate;
+        return b.createdAt.localeCompare(a.createdAt);
+      }),
+    [invoices],
+  );
+
+  const trendSummary = useMemo(() => {
+    return VENDOR_PAYABLE_CATEGORIES.map((vendor) => {
+      const points = trendSeriesByVendor[vendor] ?? [];
+      const current = points.at(-1)?.total ?? 0;
+      const previous = points.at(-2)?.total ?? 0;
+      const status = getSmartStatus(current, previous);
+      const changePct = previous > 0 ? ((current - previous) / previous) * 100 : current > 0 ? 100 : 0;
+      return {
+        vendor,
+        points,
+        current,
+        previous,
+        status,
+        changePct,
+      };
+    });
+  }, [trendSeriesByVendor]);
+
   const openModal = (vendor: VendorPayableCategory) => {
     setActiveVendor(vendor);
     setAmountInput('');
@@ -154,7 +230,7 @@ export function VendorsDashboard({
 
     setError(null);
     setMessage(null);
-    startTransition(async () => {
+    startSubmitTransition(async () => {
       const result = await addVendorInvoiceAction({
         branchId,
         vendorName: activeVendor,
@@ -194,24 +270,98 @@ export function VendorsDashboard({
   const onDeleteInvoice = (invoice: VendorInvoiceRow) => {
     setError(null);
     setMessage(null);
-    startTransition(async () => {
+    setDeletingInvoiceId(invoice.id);
+    startDeleteTransition(async () => {
       const result = await deleteVendorInvoiceAction({
         branchId,
         invoiceId: invoice.id,
       });
       if (!result.success) {
         setError(result.error ?? 'Failed to delete invoice.');
+        setDeletingInvoiceId(null);
         return;
       }
 
       setInvoices((current) => current.filter((item) => item.id !== invoice.id));
       setMessage('Invoice deleted.');
+      setDeletingInvoiceId(null);
     });
+  };
+
+  const onUploadReceipt = (invoice: VendorInvoiceRow, file: File | null) => {
+    if (!file) return;
+    setError(null);
+    setMessage(null);
+    setUploadingInvoiceId(invoice.id);
+    startUploadTransition(async () => {
+      const result = await attachVendorInvoiceReceiptAction({
+        branchId,
+        invoiceId: invoice.id,
+        vendorName: invoice.vendorName,
+        invoiceDate: invoice.invoiceDate,
+        file,
+      });
+      if (!result.success) {
+        setError(result.error ?? 'Failed to upload receipt.');
+        setUploadingInvoiceId(null);
+        return;
+      }
+
+      const receiptUrl = result.data?.receiptUrl ?? null;
+      setInvoices((current) =>
+        current.map((item) => (item.id === invoice.id ? { ...item, receiptUrl } : item)),
+      );
+      setMessage('Receipt uploaded successfully.');
+      setUploadingInvoiceId(null);
+    });
+  };
+
+  const onGenerateSmartReport = () => {
+    setSmartAnalysisError(null);
+    startSmartReportTransition(async () => {
+      const result = await getVendorSmartAnalysisAction({
+        branchId,
+        period: selectedPeriod,
+      });
+      if (!result.success) {
+        setSmartAnalysisError(result.error ?? 'Failed to generate smart report.');
+        return;
+      }
+      setSmartAnalysisData(result.data ?? null);
+    });
+  };
+
+  const onOpenSmartAnalysis = () => {
+    setIsSmartAnalysisOpen(true);
+    if (!smartAnalysisData && !isGeneratingSmartReport) {
+      onGenerateSmartReport();
+    }
+  };
+
+  const onExportPdf = () => {
+    setIsExportingPdf(true);
+    try {
+      exportVendorReportPDF({
+        branchName,
+        monthLabel,
+        insights: smartAnalysisData?.insights ?? [],
+        rows:
+          smartAnalysisData?.vendorBreakdown ?? trendSummary.map((item) => ({
+            vendorName: item.vendor,
+            total: item.current,
+            sharePct: totalForMonth > 0 ? Number(((item.current / totalForMonth) * 100).toFixed(2)) : 0,
+            status: item.status,
+          })),
+        totalSpend: smartAnalysisData?.totalCurrentMonthSpend ?? totalForMonth,
+      });
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
     <section className="space-y-6" dir="ltr">
-      <Card className="overflow-hidden rounded-[2rem] border border-slate-200 bg-gradient-to-r from-[#0f172a] via-[#1e293b] to-[#0f172a] p-8 text-white shadow-[0_24px_60px_rgba(15,23,42,0.28)]">
+      <Card className="overflow-hidden rounded-[2rem] border border-slate-200 bg-gradient-to-r from-[#0b1220] via-[#0f172a] to-[#172554] p-8 text-white shadow-[0_24px_60px_rgba(15,23,42,0.28)]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <Badge className="rounded-full border border-white/20 bg-white/10 text-white">
@@ -236,6 +386,7 @@ export function VendorsDashboard({
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cyan-200 hover:text-white"
             >
               View Monthly P&L
+              <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
@@ -252,14 +403,30 @@ export function VendorsDashboard({
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {VENDOR_PAYABLE_CATEGORIES.map((vendor) => {
-          const total = totalsByVendor[vendor] ?? 0;
-          const recent = recentByVendor.get(vendor) ?? [];
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" onClick={onOpenSmartAnalysis} disabled={isGeneratingSmartReport}>
+          {isGeneratingSmartReport ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          Smart Report
+        </Button>
+        <Button variant="default" onClick={onExportPdf} disabled={isExportingPdf || isGeneratingSmartReport}>
+          {isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Export PDF
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {trendSummary.map((summary) => {
+          const total = totalsByVendor[summary.vendor] ?? 0;
+          const recent = recentByVendor.get(summary.vendor) ?? [];
+          const gradientId = `sparkline-fill-${summary.vendor.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`;
 
           return (
             <Card
-              key={vendor}
+              key={summary.vendor}
               className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
             >
               <div className="flex items-start justify-between gap-3">
@@ -267,11 +434,33 @@ export function VendorsDashboard({
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Category
                   </p>
-                  <h2 className="mt-1 text-xl font-bold text-slate-900">{vendor}</h2>
+                  <h2 className="mt-1 text-xl font-bold text-slate-900">{summary.vendor}</h2>
                 </div>
-                <Badge className="rounded-full border border-slate-200 bg-slate-100 text-slate-700">
-                  {recent.length} recent
+                <Badge className={`rounded-full border ${getStatusStyle(summary.status)}`}>
+                  {summary.status}
                 </Badge>
+              </div>
+
+              <div className="mt-4 h-20 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={summary.points}>
+                    <defs>
+                      <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0f172a" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="#0f172a" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <Area
+                      type="monotone"
+                      dataKey="total"
+                      stroke="#0f172a"
+                      strokeWidth={2}
+                      fill={`url(#${gradientId})`}
+                      fillOpacity={1}
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
 
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -279,12 +468,16 @@ export function VendorsDashboard({
                   Spent In {monthLabel}
                 </p>
                 <p className="mt-1 text-3xl font-black text-slate-900">{formatCurrency(total)}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">
+                  {summary.changePct >= 0 ? '+' : ''}
+                  {summary.changePct.toFixed(1)}% vs previous month
+                </p>
               </div>
 
               <Button
                 className="mt-4 w-full rounded-xl"
-                onClick={() => openModal(vendor)}
-                disabled={isPending}
+                onClick={() => openModal(summary.vendor)}
+                disabled={isSubmittingInvoice || isDeletingInvoice || isUploadingReceipt}
               >
                 <Plus className="h-4 w-4" />
                 Log Invoice
@@ -330,9 +523,9 @@ export function VendorsDashboard({
                           size="sm"
                           variant="destructive"
                           onClick={() => onDeleteInvoice(invoice)}
-                          disabled={isPending}
+                          disabled={isDeletingInvoice || isUploadingReceipt || isSubmittingInvoice}
                         >
-                          {isPending ? (
+                          {isDeletingInvoice && deletingInvoiceId === invoice.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
                             <Trash2 className="h-3.5 w-3.5" />
@@ -349,9 +542,123 @@ export function VendorsDashboard({
         })}
       </div>
 
+      <Card className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Invoice Management</p>
+            <h3 className="mt-1 text-xl font-black text-slate-900">Detailed Invoice Ledger</h3>
+          </div>
+          <Badge variant="outline" className="border-slate-200 text-slate-600">
+            {tableInvoices.length} entries
+          </Badge>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-[800px] w-full border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.16em] text-slate-500">
+                <th className="px-3 py-3">Vendor</th>
+                <th className="px-3 py-3">Date</th>
+                <th className="px-3 py-3">Amount</th>
+                <th className="px-3 py-3">Receipt</th>
+                <th className="px-3 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableInvoices.length > 0 ? (
+                tableInvoices.map((invoice) => {
+                  const isRowPending =
+                    (isDeletingInvoice && deletingInvoiceId === invoice.id) ||
+                    (isUploadingReceipt && uploadingInvoiceId === invoice.id);
+                  return (
+                    <tr key={invoice.id} className={`border-b border-slate-100 ${isRowPending ? 'opacity-70 pointer-events-none' : ''}`}>
+                      <td className="px-3 py-3 text-sm font-semibold text-slate-900">{invoice.vendorName}</td>
+                      <td className="px-3 py-3 text-sm text-slate-600">{formatDate(invoice.invoiceDate)}</td>
+                      <td className="px-3 py-3 text-sm font-semibold text-slate-900">
+                        {formatCurrency(invoice.amount)}
+                      </td>
+                      <td className="px-3 py-3">
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          className="hidden"
+                          ref={(node) => {
+                            uploadInputRefs.current[invoice.id] = node;
+                          }}
+                          onChange={(event) => {
+                            const file = event.currentTarget.files?.[0] ?? null;
+                            event.currentTarget.value = '';
+                            onUploadReceipt(invoice, file);
+                          }}
+                        />
+                        {invoice.receiptUrl ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => window.open(invoice.receiptUrl ?? '', '_blank')}
+                            disabled={isRowPending}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View
+                          </Button>
+                        ) : (
+                          <Badge variant="outline" className="border-slate-200 text-slate-500">
+                            No Receipt
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isRowPending}
+                            onClick={() => uploadInputRefs.current[invoice.id]?.click()}
+                          >
+                            {isUploadingReceipt && uploadingInvoiceId === invoice.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Receipt className="h-3.5 w-3.5" />
+                            )}
+                            Upload
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => onDeleteInvoice(invoice)}
+                            disabled={isRowPending}
+                          >
+                            {isDeletingInvoice && deletingInvoiceId === invoice.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
+                    No invoices logged for this period.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       {activeVendor ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
-          <Card className="w-full max-w-lg rounded-[1.6rem] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.4)]">
+          <Card
+            className={`w-full max-w-lg rounded-[1.6rem] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.4)] ${
+              isSubmittingInvoice ? 'opacity-70 pointer-events-none' : ''
+            }`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -374,6 +681,7 @@ export function VendorsDashboard({
                     onChange={(event) => setAmountInput(event.target.value)}
                     inputMode="decimal"
                     placeholder="0.00"
+                    disabled={isSubmittingInvoice}
                     className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-7 pr-3 text-sm font-medium text-slate-900 outline-none focus:border-slate-500"
                   />
                 </div>
@@ -390,6 +698,7 @@ export function VendorsDashboard({
                   min={minDate}
                   max={maxDate}
                   onChange={(event) => setInvoiceDateInput(event.target.value)}
+                  disabled={isSubmittingInvoice}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-500"
                 />
               </label>
@@ -403,6 +712,7 @@ export function VendorsDashboard({
                   type="file"
                   accept="image/*,application/pdf"
                   onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)}
+                  disabled={isSubmittingInvoice}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-slate-700"
                 />
                 {receiptFile ? (
@@ -415,17 +725,30 @@ export function VendorsDashboard({
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={closeModal} disabled={isPending}>
+              <Button variant="outline" onClick={closeModal} disabled={isSubmittingInvoice}>
                 Cancel
               </Button>
-              <Button onClick={onSubmitInvoice} disabled={isPending}>
-                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Save Invoice
+              <Button onClick={onSubmitInvoice} disabled={isSubmittingInvoice}>
+                {isSubmittingInvoice ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                {isSubmittingInvoice ? 'Saving...' : 'Save Invoice'}
               </Button>
             </div>
           </Card>
         </div>
       ) : null}
+
+      <VendorSmartAnalysis
+        open={isSmartAnalysisOpen}
+        onOpenChange={setIsSmartAnalysisOpen}
+        isPending={isGeneratingSmartReport}
+        onGenerate={onGenerateSmartReport}
+        data={smartAnalysisData}
+        errorMessage={smartAnalysisError}
+      />
     </section>
   );
 }
