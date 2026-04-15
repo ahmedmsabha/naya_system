@@ -192,7 +192,7 @@ export function PayrollReviewTable({
 
   return (
     <div className="space-y-5 print:space-y-3" dir="ltr">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-1 print:grid-cols-3 print:gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-1 print:grid-cols-3 print:gap-3">
         <div className="bg-[#4f46e5] rounded-[2rem] p-6 shadow-lg shadow-indigo-200/40 text-white print:shadow-none print:border print:border-indigo-200">
           <div className="text-[11px] font-black text-indigo-100">
             Total Payroll
@@ -238,7 +238,7 @@ export function PayrollReviewTable({
       </div>
 
       <div className="flex items-center justify-between gap-4 flex-wrap print:hidden">
-        <div className="rounded-full border border-gray-100 bg-white px-5 py-4 min-w-[240px] flex items-center justify-between gap-6">
+        <div className="rounded-full border border-gray-100 bg-white px-5 py-4 w-full sm:w-auto min-w-0 sm:min-w-[240px] flex items-center justify-between gap-6">
           <button
             type="button"
             disabled={isNavigationPending}
@@ -276,7 +276,7 @@ export function PayrollReviewTable({
           </button>
         </div>
 
-        <div className="text-left">
+        <div className="text-left w-full sm:w-auto">
           <div className="text-[#4f46e5] font-black text-sm">
             Salary Payment System
           </div>
@@ -343,7 +343,7 @@ export function PayrollReviewTable({
               {showUnpaidOnly ? 'Unpaid only' : 'All'}
             </button>
 
-            <div className="relative min-w-[250px]">
+            <div className="relative w-full min-w-0 sm:min-w-[250px]">
               <Search className="w-4 h-4 text-gray-300 absolute left-4 top-1/2 -translate-y-1/2" />
               <input
                 value={q}
@@ -356,7 +356,7 @@ export function PayrollReviewTable({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px] print:min-w-0">
+          <table className="w-full text-sm min-w-[820px] md:min-w-[900px] print:min-w-0">
             <thead>
               <tr className="border-b border-gray-100 text-[11px] font-black text-gray-400">
                 <th className="py-4 px-6 text-left">
@@ -497,7 +497,7 @@ export function PayrollReviewTable({
         <button
           type="button"
           onClick={onDownloadPayrollPdf}
-          className="inline-flex items-center gap-2 bg-[#03153d] hover:bg-[#081f55] text-white rounded-full px-8 py-3.5 text-xl font-black shadow-lg"
+          className="inline-flex items-center gap-2 bg-[#03153d] hover:bg-[#081f55] text-white rounded-full px-5 sm:px-8 py-3 text-base sm:text-xl font-black shadow-lg w-full sm:w-auto justify-center"
         >
           <Download className="w-5 h-5" />
           Download Final Statement (PDF)

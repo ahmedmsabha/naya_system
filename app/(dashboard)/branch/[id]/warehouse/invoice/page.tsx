@@ -163,7 +163,7 @@ export default async function WarehouseInvoicePage({
   const actionAnchorIso = isHistorical ? weekStartIso : purchaseDateIso;
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl" dir="ltr">
+    <div className="flex flex-col gap-6 max-w-7xl w-full" dir="ltr">
       <div className="flex flex-col gap-4 print:hidden">
         <Link
           href={`/branch/${id}/warehouse?date=${purchaseDateIso}`}
@@ -192,13 +192,13 @@ export default async function WarehouseInvoicePage({
         />
       </div>
 
-      <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm print:shadow-none print:border-none print:p-0 print:w-full">
+      <div className="bg-white rounded-3xl border border-gray-100 p-4 sm:p-6 md:p-8 shadow-sm print:shadow-none print:border-none print:p-0 print:w-full overflow-x-hidden">
         <div className="h-2 bg-blue-900 rounded-full mb-6" />
 
-        <div className="flex items-start justify-between gap-6 pb-6 border-b border-gray-100">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 pb-6 border-b border-gray-100">
           <div className="space-y-2">
             <p className="text-xs font-semibold text-gray-500">Naya Foods, LLC</p>
-            <h1 className="text-4xl font-black text-[#052e36] tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-black text-[#052e36] tracking-tight">
               Invoice {branch.name.toUpperCase()}
             </h1>
             <p className="text-sm text-gray-600">Orders from {formatWeekLongLabel(weekStartIso, weekEndIso)}</p>
@@ -209,7 +209,7 @@ export default async function WarehouseInvoicePage({
               </span>
             ) : null}
           </div>
-          <div className="text-right space-y-2">
+          <div className="text-left sm:text-right space-y-2">
             <div className="text-xs font-black tracking-widest uppercase text-blue-700">Status</div>
             <div className="text-sm font-black uppercase">{invoiceStatus}</div>
             {totalsOutOfSync ? (
@@ -221,7 +221,7 @@ export default async function WarehouseInvoicePage({
         </div>
 
         <div className="mt-6 overflow-x-auto rounded-2xl border border-gray-200">
-          <table className="w-full text-sm border-collapse min-w-[1120px]">
+          <table className="w-full text-sm border-collapse min-w-[980px] md:min-w-[1120px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 text-[11px] font-black tracking-widest uppercase text-gray-600">
@@ -297,7 +297,7 @@ export default async function WarehouseInvoicePage({
             <p className="text-[10px] font-black tracking-widest uppercase text-gray-500">Week Range</p>
             <p className="font-semibold text-[#052e36] mt-1">{formatWeekLongLabel(weekStartIso, weekEndIso)}</p>
           </div>
-          <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/40 text-right">
+          <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/40 text-left md:text-right">
             <p className="text-[10px] font-black tracking-widest uppercase text-gray-500">Saved Invoice Total</p>
             <p className="font-semibold text-[#052e36] mt-1">
               ${formatNumberEn(storedInvoiceTotal || computedTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

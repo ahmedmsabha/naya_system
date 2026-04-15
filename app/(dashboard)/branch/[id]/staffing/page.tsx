@@ -93,10 +93,10 @@ export default async function StaffingPage({
   const staffCount = employees.length;
   const adpConnected = employees.filter((r) => r.adp_status === "connected").length;
   return (
-    <div dir="ltr" className="max-w-7xl">
+    <div dir="ltr" className="max-w-7xl w-full">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
         <div>
-          <h1 className="text-3xl font-black text-[#052e36] tracking-tight">Staffing</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-[#052e36] tracking-tight">Staffing</h1>
           <p className="text-gray-400 text-sm font-bold mt-2">
             {branch.name} - employee information entry and updates
           </p>
@@ -112,7 +112,7 @@ export default async function StaffingPage({
         <AddStaffDialog branchId={id} selectedPeriod={selectedPeriod} />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-[11px] font-black text-gray-300 tracking-widest uppercase">ADP</div>
@@ -141,7 +141,7 @@ export default async function StaffingPage({
         </div>
       </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-gray-100 p-6 shadow-sm mb-8 flex items-center justify-between gap-4 flex-wrap">
+      <div className="bg-white rounded-[2.5rem] border border-gray-100 p-4 sm:p-6 shadow-sm mb-8 flex items-start sm:items-center justify-between gap-4 flex-wrap">
         <div>
           <div className="text-sm font-black text-[#052e36]">Payroll sync</div>
           <div className="text-[12px] font-bold text-gray-400 mt-1">
@@ -150,7 +150,7 @@ export default async function StaffingPage({
         </div>
         <form action={syncPayrollAction}>
           <input type="hidden" name="branch_id" value={id} />
-          <button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-2xl px-6 py-3 text-sm font-black shadow-lg shadow-blue-200/30 active:scale-[0.99] transition-all">
+          <button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-2xl px-5 sm:px-6 py-3 text-sm font-black shadow-lg shadow-blue-200/30 active:scale-[0.99] transition-all w-full sm:w-auto">
             Sync now
           </button>
         </form>

@@ -88,7 +88,7 @@ export default async function WarehouseMainPage({
   const headerDate = new Date(`${purchaseDateIso}T12:00:00`);
 
   return (
-    <div className="flex flex-col gap-8 max-w-7xl mx-auto px-4" dir="ltr">
+    <div className="flex flex-col gap-6 md:gap-8 max-w-7xl mx-auto px-0 sm:px-2 md:px-4" dir="ltr">
       <Link
         href={`/branch/${id}`}
         className="inline-flex items-center gap-2 text-[11px] font-black tracking-[.25em] text-[#a48443]/60 hover:text-[#a48443] transition-all uppercase self-start group"
@@ -98,9 +98,9 @@ export default async function WarehouseMainPage({
       </Link>
 
       {/* Stats row */}
-      <div className="flex items-center gap-6 flex-wrap">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">
         {/* Archive count */}
-        <div className="bg-[#052e36] rounded-[2rem] px-8 py-6 min-w-[180px] shadow-xl shadow-teal-900/10">
+        <div className="bg-[#052e36] rounded-[2rem] px-6 md:px-8 py-6 shadow-xl shadow-teal-900/10 lg:col-span-3">
           <p className="text-[10px] font-black text-gray-400 tracking-[.2em] uppercase mb-2">Archive</p>
           <div className="flex items-center gap-3">
             <span className="text-4xl font-black text-white">{invoicesCount || 0}</span>
@@ -109,13 +109,13 @@ export default async function WarehouseMainPage({
         </div>
 
         {/* Day total — server initial value; updated live by InventoryView via onDayTotalChange */}
-        <div className="bg-[#2563eb] rounded-[2rem] px-10 py-8 flex-1 min-w-[240px] shadow-2xl shadow-blue-200/40 relative overflow-hidden">
+        <div className="bg-[#2563eb] rounded-[2rem] px-6 md:px-10 py-8 shadow-2xl shadow-blue-200/40 relative overflow-hidden lg:col-span-6">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl" />
           <p className="text-[11px] font-black text-blue-100 tracking-[.2em] uppercase mb-2">
             Day purchases total
           </p>
           <p
-            className="text-5xl font-black text-white tracking-tighter"
+            className="text-4xl md:text-5xl font-black text-white tracking-tighter break-all sm:break-normal"
             id="day-total-display"
           >
             ${formatNumberEn(initialDayTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -124,7 +124,7 @@ export default async function WarehouseMainPage({
         </div>
 
         {/* Date + invoice link */}
-        <div className="bg-white rounded-[2rem] px-8 py-6 border border-gray-100 flex flex-col items-center justify-center min-w-[200px] shadow-sm ml-auto gap-3">
+        <div className="bg-white rounded-[2rem] px-6 md:px-8 py-6 border border-gray-100 flex flex-col items-center justify-center shadow-sm gap-3 lg:col-span-3">
           <div className="flex items-center gap-3">
             <Calendar className="w-5 h-5 text-[#2563eb]" />
             <span className="font-black text-[#052e36] text-xl tracking-tight">
@@ -142,7 +142,7 @@ export default async function WarehouseMainPage({
       </div>
 
       {/* Main content */}
-      <div className="flex flex-col lg:flex-row gap-10 items-start mt-4">
+      <div className="flex flex-col xl:flex-row gap-6 md:gap-10 items-start mt-2 md:mt-4">
         <div className="flex-1 min-w-0 w-full">
           <InventoryView
             key={`${id}-${purchaseDateIso}-${inventoryFingerprint}`}
@@ -153,7 +153,7 @@ export default async function WarehouseMainPage({
             inventoryByDate={inventoryByDate}
           />
         </div>
-        <div className="sticky top-8 w-full lg:w-80 shrink-0">
+        <div className="w-full xl:w-80 shrink-0 xl:sticky xl:top-8">
           <AddItemForm branchId={id} />
         </div>
       </div>

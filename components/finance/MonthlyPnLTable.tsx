@@ -280,8 +280,8 @@ export function MonthlyPnLTable({
   return (
     <section className="space-y-5">
       <Card className="rounded-3xl border border-slate-200 shadow-[0_10px_26px_rgba(15,23,42,0.08)] bg-white">
-        <CardHeader className="px-6 pt-6 pb-0">
-          <div className="flex items-center justify-between gap-3">
+        <CardHeader className="px-4 sm:px-6 pt-6 pb-0">
+          <div className="flex items-start sm:items-center justify-between gap-3 flex-wrap">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
                 Monthly P&L Expense Entry
@@ -290,7 +290,7 @@ export function MonthlyPnLTable({
                 Category Ledger
               </CardTitle>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">
                 Total Collected
               </p>
@@ -299,9 +299,9 @@ export function MonthlyPnLTable({
           </div>
         </CardHeader>
 
-        <CardContent className="px-6 pb-6 pt-5">
+        <CardContent className="px-4 sm:px-6 pb-6 pt-5">
           <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
-            <table className="w-full min-w-[1040px] bg-white">
+            <table className="w-full min-w-[900px] md:min-w-[1040px] bg-white">
               <thead className="bg-slate-50">
                 <tr className="text-left">
                   <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -452,9 +452,9 @@ export function MonthlyPnLTable({
             </table>
           </div>
 
-          <div className="sticky bottom-0 z-10 mt-4 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="sticky bottom-0 z-10 mt-4 rounded-2xl border border-slate-200 bg-white/95 p-3 sm:p-4 shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                 <Badge variant="outline" className="h-8 px-3 text-slate-700">
                   Total Expenses {formatCurrency(totalExpenses)}
                 </Badge>
@@ -478,7 +478,7 @@ export function MonthlyPnLTable({
       </Card>
 
       <Card className="rounded-3xl border border-slate-200 shadow-[0_10px_26px_rgba(15,23,42,0.08)] bg-white">
-        <CardHeader className="px-6 pt-6 pb-0">
+        <CardHeader className="px-4 sm:px-6 pt-6 pb-0">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
@@ -507,7 +507,7 @@ export function MonthlyPnLTable({
           </div>
         </CardHeader>
 
-        <CardContent className="px-6 pb-6 pt-5">
+        <CardContent className="px-4 sm:px-6 pb-6 pt-5">
           <div
             className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 ${
               isSavingDeductions ? 'opacity-70 pointer-events-none' : ''

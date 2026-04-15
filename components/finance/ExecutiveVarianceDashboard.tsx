@@ -101,14 +101,14 @@ export function ExecutiveVarianceDashboard({
   return (
     <section className="space-y-6" dir="ltr">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="inline-flex items-center rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="inline-flex w-full sm:w-auto items-center rounded-2xl border border-slate-200 bg-white p-1 shadow-sm overflow-x-auto">
           <Link
             href={monthHrefPrev}
             className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-900"
           >
             Previous Month
           </Link>
-          <div className="px-5 py-2 rounded-xl text-sm font-bold bg-slate-900 text-white min-w-[170px] text-center">
+          <div className="px-4 sm:px-5 py-2 rounded-xl text-sm font-bold bg-slate-900 text-white min-w-[140px] sm:min-w-[170px] text-center">
             {monthLabel}
           </div>
           <Link
@@ -119,7 +119,7 @@ export function ExecutiveVarianceDashboard({
           </Link>
         </div>
 
-        <div className="text-right">
+        <div className="text-left sm:text-right w-full sm:w-auto">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
             Variance Intelligence
           </p>
@@ -151,7 +151,7 @@ export function ExecutiveVarianceDashboard({
           </div>
         </div>
 
-        <div className="h-[340px] mt-6">
+        <div className="h-[280px] sm:h-[320px] md:h-[340px] mt-6">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={paretoRows} margin={{ left: 8, right: 14, top: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -209,7 +209,7 @@ export function ExecutiveVarianceDashboard({
         </div>
 
         <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[980px]">
+          <table className="w-full min-w-[860px] md:min-w-[980px]">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.16em] text-slate-500">
                 <th className="py-3 pr-3">Category</th>
@@ -249,7 +249,7 @@ export function ExecutiveVarianceDashboard({
           AI Financial Commentary
         </p>
         <h3 className="text-2xl font-semibold tracking-tight text-slate-950 mt-1">Variance Insights</h3>
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {insights.map((sentence, index) => (
             <article
               key={`${sentence}-${index}`}

@@ -65,7 +65,7 @@ export default async function WarehouseSchedulePage({
   });
 
   return (
-    <div className="flex flex-col gap-6 max-w-6xl" dir="ltr">
+    <div className="flex flex-col gap-6 max-w-6xl w-full" dir="ltr">
       <Link
         href={`/branch/${id}`}
         className="inline-flex items-center gap-2 text-[11px] font-bold tracking-widest text-[#a48443]/70 hover:text-[#a48443] transition-colors uppercase self-start"
@@ -75,7 +75,7 @@ export default async function WarehouseSchedulePage({
       </Link>
 
       <div>
-        <h1 className="text-2xl font-black text-[#052e36]">
+        <h1 className="text-xl sm:text-2xl font-black text-[#052e36]">
           Distribution schedule: <span className="text-[#2563eb]">{branch.name}</span>
         </h1>
         <p className="text-gray-400 text-sm mt-2 max-w-2xl">

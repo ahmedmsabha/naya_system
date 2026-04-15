@@ -96,7 +96,7 @@ export function InventoryView({
     });
 
   return (
-    <div className="flex flex-col gap-8 w-full max-w-full overflow-hidden" dir="ltr">
+    <div className="flex flex-col gap-6 md:gap-8 w-full max-w-full overflow-hidden" dir="ltr">
       <div className="relative group">
         <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-[#2563eb] transition-colors" />
         <input
@@ -104,13 +104,13 @@ export function InventoryView({
           placeholder="Search inventory items..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-white border border-gray-100 rounded-[2rem] py-5 pl-14 pr-8 text-lg font-medium shadow-sm focus:outline-none focus:ring-4 focus:ring-[#2563eb]/5 focus:border-[#2563eb]/20 transition-all placeholder:text-gray-300"
+          className="w-full bg-white border border-gray-100 rounded-[2rem] py-4 md:py-5 pl-12 md:pl-14 pr-5 md:pr-8 text-base md:text-lg font-medium shadow-sm focus:outline-none focus:ring-4 focus:ring-[#2563eb]/5 focus:border-[#2563eb]/20 transition-all placeholder:text-gray-300"
         />
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 min-w-0">
             <label className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
               <span className="text-[10px] font-black text-gray-400 tracking-widest uppercase whitespace-nowrap">
                 Date
@@ -163,7 +163,7 @@ export function InventoryView({
             </div>
           </div>
 
-          <div className="flex items-center gap-4 bg-[#052e36] p-2 rounded-2xl shadow-lg">
+          <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-4 bg-[#052e36] p-2 rounded-2xl shadow-lg w-full sm:w-auto">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-3">
               Multiplier
             </span>
@@ -187,7 +187,7 @@ export function InventoryView({
         </div>
 
         {/* Day summary + live total */}
-        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm px-6 py-5">
+        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm px-4 sm:px-6 py-5">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex flex-col">
               <span className="text-[10px] font-black text-gray-300 tracking-[.25em] uppercase">
@@ -199,7 +199,7 @@ export function InventoryView({
             </div>
             <div className="flex flex-col items-end gap-1">
               <span className="text-[10px] font-black text-gray-300 tracking-widest uppercase">Day total</span>
-              <span className="text-2xl font-black text-[#2563eb] tabular-nums">
+              <span className="text-xl sm:text-2xl font-black text-[#2563eb] tabular-nums">
                 ${formatNumberEn(dayTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
@@ -225,8 +225,8 @@ export function InventoryView({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-2">
+          <div className="flex items-start sm:items-center gap-3">
             <div className="w-10 h-10 bg-[#eef5fe] rounded-full flex items-center justify-center border border-blue-50">
               <span className="text-[#2563eb] text-xl font-bold">+</span>
             </div>

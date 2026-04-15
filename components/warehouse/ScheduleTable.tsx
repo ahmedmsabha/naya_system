@@ -158,7 +158,7 @@ export function ScheduleTable({
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-gray-100">
-        <table className="w-full text-sm border-collapse min-w-[880px]">
+        <table className="w-full text-sm border-collapse min-w-[820px] md:min-w-[880px]">
           <thead>
             <tr className="border-b border-gray-100">
               <th className="text-left px-4 py-3 text-[11px] font-bold text-gray-500 tracking-wider min-w-[140px] uppercase">

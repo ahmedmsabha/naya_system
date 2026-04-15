@@ -90,10 +90,10 @@ export default async function PayrollPage({
   const halfLabel = selectedHalf === "p1" ? "01-15" : selectedHalf === "p2" ? "16-30" : "Full month";
 
   return (
-    <div className="max-w-7xl" dir="ltr">
+    <div className="max-w-7xl w-full" dir="ltr">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
         <div className="text-left">
-          <h1 className="text-4xl font-black text-[#111827] tracking-tight">Salary Payment System</h1>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#111827] tracking-tight">Salary Payment System</h1>
           <p className="text-gray-500 text-sm font-bold mt-2">
             {monthLabel} payout statement - {halfLabel}
           </p>

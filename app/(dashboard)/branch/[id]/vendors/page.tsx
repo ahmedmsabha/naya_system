@@ -167,7 +167,7 @@ export default async function BranchVendorsPage({
           Back To Branch Hub
         </Link>
 
-        <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="inline-flex w-full sm:w-auto items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm overflow-x-auto">
           <Link
             href={`/branch/${id}/vendors?period=${addMonths(selectedPeriod, -1)}`}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"

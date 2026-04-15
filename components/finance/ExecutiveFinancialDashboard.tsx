@@ -133,16 +133,16 @@ export function ExecutiveFinancialDashboard({
   };
 
   return (
-    <section className="space-y-7" dir="ltr">
+    <section className="space-y-6 md:space-y-7" dir="ltr">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="inline-flex items-center rounded-2xl border border-slate-200/80 bg-white p-1 shadow-sm">
+        <div className="inline-flex w-full sm:w-auto items-center rounded-2xl border border-slate-200/80 bg-white p-1 shadow-sm overflow-x-auto">
           <Link
             href={monthHrefPrev}
             className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-900"
           >
             Previous Month
           </Link>
-          <div className="px-5 py-2 rounded-xl text-sm font-bold bg-slate-900 text-white min-w-[170px] text-center">
+          <div className="px-4 sm:px-5 py-2 rounded-xl text-sm font-bold bg-slate-900 text-white min-w-[140px] sm:min-w-[170px] text-center">
             {monthLabel}
           </div>
           <Link
@@ -153,7 +153,7 @@ export function ExecutiveFinancialDashboard({
           </Link>
         </div>
 
-        <div className="text-right">
+        <div className="text-left sm:text-right w-full sm:w-auto">
           <p className="text-xs uppercase tracking-[0.22em] text-slate-500 font-semibold">
             Executive BI Dashboard
           </p>
@@ -170,7 +170,7 @@ export function ExecutiveFinancialDashboard({
         </div>
       </div>
 
-      <section className="grid grid-cols-1 xl:grid-cols-4 gap-5">
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
         {kpis.map((kpi) => (
           <article
             key={kpi.label}
@@ -231,7 +231,7 @@ export function ExecutiveFinancialDashboard({
           </div>
         </div>
 
-        <div className="h-[360px] mt-6">
+        <div className="h-[300px] sm:h-[340px] md:h-[360px] mt-6">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={waterfallRows}
@@ -277,7 +277,7 @@ export function ExecutiveFinancialDashboard({
         </div>
       </section>
 
-      <section className="rounded-[30px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-6 md:p-8 shadow-[0_16px_40px_rgba(15,23,42,0.1)]">
+      <section className="rounded-[30px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 sm:p-6 md:p-8 shadow-[0_16px_40px_rgba(15,23,42,0.1)]">
         <div className="mb-5">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">
             Monthly P&L Ledger

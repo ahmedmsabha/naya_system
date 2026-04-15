@@ -207,7 +207,7 @@ export function StaffTable({
           />
           {isPeriodPending ? <Loader2 className="w-4 h-4 animate-spin text-[#2563eb]" /> : null}
         </div>
-        <div className="relative flex-1 min-w-[260px]">
+        <div className="relative flex-1 w-full sm:w-auto min-w-0 sm:min-w-[260px]">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -227,7 +227,7 @@ export function StaffTable({
       ) : null}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[980px]">
           <thead>
             <tr className="border-b border-gray-100 text-[11px] font-black text-gray-400 tracking-widest uppercase">
               <th className="py-4 px-6 text-left">Employee</th>
@@ -291,7 +291,7 @@ export function StaffTable({
                   </td>
                   <td className="py-7 px-4 text-center text-[12px] font-bold text-gray-500">
                     <div className="flex flex-col gap-1">
-                      <span className="truncate max-w-[220px] mx-auto">{r.email ?? "—"}</span>
+                      <span className="truncate max-w-[180px] md:max-w-[220px] mx-auto">{r.email ?? "—"}</span>
                       <span className="text-gray-300 text-[11px]">{r.phone ?? "—"}</span>
                     </div>
                   </td>
@@ -447,7 +447,7 @@ export function StaffTable({
       {editingEmployee && editingRecord ? (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/30" onClick={closeEdit} />
-          <div className="absolute inset-x-0 top-16 mx-auto max-w-2xl px-4">
+          <div className="absolute inset-x-0 top-6 sm:top-16 mx-auto max-w-2xl px-3 sm:px-4">
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
               <div className="p-7 border-b border-gray-50 flex items-center justify-between gap-4">
                 <div>

@@ -18,11 +18,12 @@ export default async function StaffingLayout({
   if (!branch) notFound();
 
   return (
-    <div className="flex h-full min-h-[calc(100vh-4rem)] w-full -mx-8 -my-8">
-      <div className="flex-1 overflow-y-auto p-8">{children}</div>
-      <div>
+    <div className="flex flex-col lg:flex-row h-full min-h-[calc(100vh-4rem)] w-full -mx-4 -my-4 md:-mx-8 md:-my-8 overflow-x-hidden">
+      <div className="print:hidden lg:order-last">
         <StaffingSidebar branchId={id} />
       </div>
+
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">{children}</div>
     </div>
   );
 }
