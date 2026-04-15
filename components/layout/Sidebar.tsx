@@ -21,11 +21,13 @@ const navigation = [
   { name: "Staffing", href: "/staffing", icon: Users },
 ];
 
+export { navigation };
+
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="flex flex-col h-screen w-64 bg-[#052e36] text-white shrink-0 font-sans">
+    <div className="hidden md:flex md:flex-col h-screen w-64 bg-[#052e36] text-white shrink-0 font-sans">
       <div className="p-6">
         <h1 className="text-3xl font-heading font-extrabold tracking-widest text-white flex items-baseline">
           NAYA<span className="text-[#a48443] leading-none ml-0.5">.</span>

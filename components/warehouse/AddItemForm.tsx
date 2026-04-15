@@ -7,26 +7,26 @@ import { PlusCircle, Loader2 } from "lucide-react";
 
 export function AddItemForm({ branchId }: { branchId: string }) {
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(false);
+    setErrorMessage(null);
+    setSuccessMessage(null);
     const fd = new FormData(e.currentTarget);
     fd.set("branch_id", branchId);
     startTransition(async () => {
       const result = await addIngredient(fd);
       if (result?.error) {
-        setError(result.error);
+        setErrorMessage(result.error);
       } else {
-        setSuccess(true);
+        setSuccessMessage("Product added successfully.");
         formRef.current?.reset();
         router.refresh();
-        setTimeout(() => setSuccess(false), 2000);
+        setTimeout(() => setSuccessMessage(null), 2000);
       }
     });
   };
@@ -49,7 +49,11 @@ export function AddItemForm({ branchId }: { branchId: string }) {
         </div>
       </div>
 
-      <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form
+        ref={formRef}
+        onSubmit={handleSubmit}
+        className={`flex flex-col gap-5 ${isPending ? "opacity-70 pointer-events-none" : ""}`}
+      >
         {/* Name */}
         <div className="flex flex-col gap-2">
           <label className="text-[10px] font-black text-gray-400 tracking-[.2em] uppercase ml-1">Product Name</label>
@@ -58,6 +62,7 @@ export function AddItemForm({ branchId }: { branchId: string }) {
             type="text"
             placeholder="e.g. Falafel Mix"
             required
+            disabled={isPending}
             className="bg-[#0a3f4a] text-white placeholder-gray-500 rounded-2xl px-5 py-4 text-sm font-medium border border-white/5 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
           />
         </div>
@@ -73,6 +78,7 @@ export function AddItemForm({ branchId }: { branchId: string }) {
               min="0"
               defaultValue="0.00"
               inputMode="decimal"
+              disabled={isPending}
               className="bg-[#0a3f4a] text-white rounded-2xl px-5 py-4 text-sm font-medium border border-white/5 focus:outline-none focus:border-[#2563eb] transition-all w-full"
             />
           </div>
@@ -82,14 +88,14 @@ export function AddItemForm({ branchId }: { branchId: string }) {
               name="unit"
               type="text"
               defaultValue="PCS"
+              disabled={isPending}
               className="bg-[#0a3f4a] text-white rounded-2xl px-5 py-4 text-sm font-medium border border-white/5 focus:outline-none focus:border-[#2563eb] transition-all w-full uppercase text-center"
             />
           </div>
         </div>
 
-        {error && (
-          <p className="text-red-400 text-[11px] font-bold bg-red-400/10 p-3 rounded-xl border border-red-400/20">{error}</p>
-        )}
+        {errorMessage ? <p className="text-sm font-semibold text-red-500">{errorMessage}</p> : null}
+        {successMessage ? <p className="text-sm font-semibold text-emerald-600">{successMessage}</p> : null}
 
         <button
           type="submit"
@@ -101,8 +107,6 @@ export function AddItemForm({ branchId }: { branchId: string }) {
               <Loader2 className="w-4 h-4 animate-spin" />
               Processing...
             </>
-          ) : success ? (
-            "Successfully Added"
           ) : (
             "Confirm Add Product"
           )}

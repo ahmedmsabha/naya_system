@@ -16,16 +16,16 @@ export default async function DashboardLayout({
     redirect("/login");
   }
   return (
-    <div className="flex h-full min-h-screen w-full overflow-hidden print:block print:overflow-visible">
+    <div className="flex h-full min-h-screen w-full overflow-x-hidden overflow-y-hidden print:block print:overflow-visible">
       <div className="print:hidden">
         <Sidebar />
       </div>
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative print:block print:overflow-visible">
+      <div className="flex-1 flex flex-col h-full overflow-x-hidden overflow-y-hidden relative print:block print:overflow-visible">
         <div className="print:hidden">
           <TopHeader />
         </div>
-        <main className="flex-1 overflow-y-auto w-full relative bg-white print:overflow-visible print:bg-white">
-          <div className="min-h-full p-8 max-w-7xl mx-auto print:p-0 print:max-w-none">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden w-full relative bg-white print:overflow-visible print:bg-white">
+          <div className="min-h-full p-4 md:p-8 max-w-7xl mx-auto print:p-0 print:max-w-none">
             {children}
           </div>
         </main>

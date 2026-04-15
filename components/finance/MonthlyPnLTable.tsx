@@ -5,6 +5,7 @@ import { Eye, Link2, Loader2, RefreshCw, Save, Upload } from 'lucide-react';
 import { upsertDeductions, upsertExpense } from '@/app/(dashboard)/branch/[id]/financials/actions';
 import {
   MONTHLY_PNL_EXPENSE_CATEGORIES,
+  isVendorPayableCategory,
   type MonthlyPnLDeductionCategory,
   type MonthlyPnLExpenseCategory,
 } from '@/lib/finance/monthly-pnl';
@@ -61,6 +62,10 @@ function parseAmount(input: string): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function isVendorManagedCategory(category: MonthlyPnLExpenseCategory): boolean {
+  return isVendorPayableCategory(category);
+}
+
 export function MonthlyPnLTable({
   branchId,
   monthPeriod,
@@ -78,8 +83,11 @@ export function MonthlyPnLTable({
     ),
   );
   const [isSavingDeductions, setIsSavingDeductions] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [rowErrorMessage, setRowErrorMessage] = useState<string | null>(null);
+  const [rowSuccessMessage, setRowSuccessMessage] = useState<string | null>(null);
+  const [rowFeedbackCategory, setRowFeedbackCategory] = useState<MonthlyPnLExpenseCategory | null>(null);
+  const [deductionErrorMessage, setDeductionErrorMessage] = useState<string | null>(null);
+  const [deductionSuccessMessage, setDeductionSuccessMessage] = useState<string | null>(null);
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
 
   const rowsByCategory = useMemo(() => {
@@ -96,10 +104,27 @@ export function MonthlyPnLTable({
             category,
             amount: 0,
             receiptUrl: null,
-            readOnly: category === 'Labor' || category === 'Warehouse',
+            readOnly:
+              category === 'Labor' || category === 'Warehouse' || isVendorManagedCategory(category),
+            helperLinkHref:
+              category === 'Labor'
+                ? `/branch/${branchId}/staffing`
+                : category === 'Warehouse'
+                  ? `/branch/${branchId}/warehouse`
+                  : isVendorManagedCategory(category)
+                    ? `/branch/${branchId}/vendors?period=${monthPeriod}`
+                    : undefined,
+            helperLinkLabel:
+              category === 'Labor'
+                ? 'View Payroll'
+                : category === 'Warehouse'
+                  ? 'View Warehouse'
+                  : isVendorManagedCategory(category)
+                    ? 'View Vendors'
+                    : undefined,
           },
       ),
-    [rowsByCategory],
+    [branchId, monthPeriod, rowsByCategory],
   );
 
   const totalExpenses = useMemo(
@@ -159,52 +184,63 @@ export function MonthlyPnLTable({
   };
 
   const saveRow = async (row: ExpenseRow, file?: File) => {
-    setErrorMessage(null);
-    setSuccessMessage(null);
+    setRowErrorMessage(null);
+    setRowSuccessMessage(null);
+    setRowFeedbackCategory(row.category);
     setSavingByCategory((current) => ({ ...current, [row.category]: true }));
 
     if (file) {
       setUploadStateByCategory((current) => ({ ...current, [row.category]: 'uploading' }));
     }
 
-    const result = await upsertExpense({
-      branchId,
-      monthPeriod,
-      category: row.category,
-      amount: row.amount,
-      file,
-    });
+    try {
+      const result = await upsertExpense({
+        branchId,
+        monthPeriod,
+        category: row.category,
+        amount: row.amount,
+        file,
+      });
 
-    if (!result.success) {
-      setErrorMessage(result.error ?? `Failed to save ${row.category}.`);
-      setSavingByCategory((current) => ({ ...current, [row.category]: false }));
+      if (!result.success) {
+        setRowErrorMessage(result.error ?? `Failed to save ${row.category}.`);
+        if (file) {
+          setUploadStateByCategory((current) => ({
+            ...current,
+            [row.category]: row.receiptUrl ? 'ready' : 'empty',
+          }));
+        }
+        return;
+      }
+
+      if (result.receiptUrl) {
+        setRows((current) =>
+          current.map((item) =>
+            item.category === row.category
+              ? { ...item, receiptUrl: result.receiptUrl ?? item.receiptUrl }
+              : item,
+          ),
+        );
+        setUploadStateByCategory((current) => ({ ...current, [row.category]: 'ready' }));
+      } else if (!file) {
+        setUploadStateByCategory((current) => ({
+          ...current,
+          [row.category]: row.receiptUrl ? 'ready' : 'empty',
+        }));
+      }
+
+      setRowSuccessMessage(`${row.category} saved successfully.`);
+    } catch {
+      setRowErrorMessage(`Failed to save ${row.category}.`);
       if (file) {
         setUploadStateByCategory((current) => ({
           ...current,
           [row.category]: row.receiptUrl ? 'ready' : 'empty',
         }));
       }
-      return;
+    } finally {
+      setSavingByCategory((current) => ({ ...current, [row.category]: false }));
     }
-
-    if (result.receiptUrl) {
-      setRows((current) =>
-        current.map((item) =>
-          item.category === row.category
-            ? { ...item, receiptUrl: result.receiptUrl ?? item.receiptUrl }
-            : item,
-        ),
-      );
-      setUploadStateByCategory((current) => ({ ...current, [row.category]: 'ready' }));
-    } else if (!file) {
-      setUploadStateByCategory((current) => ({
-        ...current,
-        [row.category]: row.receiptUrl ? 'ready' : 'empty',
-      }));
-    }
-
-    setSavingByCategory((current) => ({ ...current, [row.category]: false }));
-    setSuccessMessage(`${row.category} saved successfully.`);
   };
 
   const triggerUpload = (category: MonthlyPnLExpenseCategory) => {
@@ -220,20 +256,25 @@ export function MonthlyPnLTable({
   };
 
   const saveDeductions = async () => {
-    setErrorMessage(null);
-    setSuccessMessage(null);
+    setDeductionErrorMessage(null);
+    setDeductionSuccessMessage(null);
     setIsSavingDeductions(true);
-    const result = await upsertDeductions({
-      branchId,
-      monthPeriod,
-      values: deductions,
-    });
-    if (!result.success) {
-      setErrorMessage(result.error ?? 'Failed to save deductions.');
-    } else {
-      setSuccessMessage('Deductions saved successfully.');
+    try {
+      const result = await upsertDeductions({
+        branchId,
+        monthPeriod,
+        values: deductions,
+      });
+      if (!result.success) {
+        setDeductionErrorMessage(result.error ?? 'Failed to save deductions.');
+      } else {
+        setDeductionSuccessMessage('Deductions saved successfully.');
+      }
+    } catch {
+      setDeductionErrorMessage('Failed to save deductions.');
+    } finally {
+      setIsSavingDeductions(false);
     }
-    setIsSavingDeductions(false);
   };
 
   return (
@@ -286,9 +327,15 @@ export function MonthlyPnLTable({
                   const saving = Boolean(savingByCategory[row.category]);
                   const uploadState =
                     uploadStateByCategory[row.category] ?? (row.receiptUrl ? 'ready' : 'empty');
+                  const rowPending = saving || uploadState === 'uploading';
 
                   return (
-                    <tr key={row.category} className="border-t border-slate-100 hover:bg-slate-50/60">
+                    <tr
+                      key={row.category}
+                      className={`border-t border-slate-100 hover:bg-slate-50/60 ${
+                        rowPending ? 'opacity-70 pointer-events-none' : ''
+                      }`}
+                    >
                       <td className="px-5 py-4">
                         <div className="flex flex-col">
                           <span className="text-sm font-semibold text-slate-800">{row.category}</span>
@@ -349,6 +396,7 @@ export function MonthlyPnLTable({
                             <Button
                               variant="outline"
                               size="sm"
+                              disabled={rowPending}
                               onClick={() => window.open(row.receiptUrl ?? '', '_blank')}
                             >
                               <Eye className="h-3.5 w-3.5" />
@@ -357,6 +405,7 @@ export function MonthlyPnLTable({
                             <Button
                               variant="outline"
                               size="sm"
+                              disabled={rowPending}
                               onClick={() => triggerUpload(row.category)}
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
@@ -367,6 +416,7 @@ export function MonthlyPnLTable({
                           <Button
                             variant="outline"
                             size="sm"
+                            disabled={rowPending}
                             onClick={() => triggerUpload(row.category)}
                           >
                             <Upload className="h-3.5 w-3.5" />
@@ -378,16 +428,22 @@ export function MonthlyPnLTable({
                         <Button
                           variant="default"
                           size="sm"
-                          disabled={row.readOnly || saving}
+                          disabled={row.readOnly || rowPending}
                           onClick={() => saveRow(row)}
                         >
-                          {saving ? (
+                          {rowPending ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
                             <Save className="h-3.5 w-3.5" />
                           )}
-                          Save
+                          {rowPending ? 'Saving...' : 'Save'}
                         </Button>
+                        {rowFeedbackCategory === row.category && rowErrorMessage ? (
+                          <p className="mt-2 text-xs font-medium text-red-500">{rowErrorMessage}</p>
+                        ) : null}
+                        {rowFeedbackCategory === row.category && rowSuccessMessage ? (
+                          <p className="mt-2 text-xs font-medium text-emerald-600">{rowSuccessMessage}</p>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -432,15 +488,31 @@ export function MonthlyPnLTable({
                 Net Total and Final P&L
               </CardTitle>
             </div>
-            <Button onClick={saveDeductions} disabled={isSavingDeductions}>
-              {isSavingDeductions ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save Deductions
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button onClick={saveDeductions} disabled={isSavingDeductions}>
+                {isSavingDeductions ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {isSavingDeductions ? 'Saving...' : 'Save Deductions'}
+              </Button>
+              {deductionErrorMessage ? (
+                <p className="text-xs font-medium text-red-500">{deductionErrorMessage}</p>
+              ) : null}
+              {deductionSuccessMessage ? (
+                <p className="text-xs font-medium text-emerald-600">{deductionSuccessMessage}</p>
+              ) : null}
+            </div>
           </div>
         </CardHeader>
 
         <CardContent className="px-6 pb-6 pt-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <div
+            className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 ${
+              isSavingDeductions ? 'opacity-70 pointer-events-none' : ''
+            }`}
+          >
             <SummaryInputCard
               label="Square Fees"
               value={deductions['Square Fees']}
@@ -474,12 +546,6 @@ export function MonthlyPnLTable({
             </div>
             <SummaryReadCard label="Total Collected" value={totalCollected} />
           </div>
-          {errorMessage ? <p className="mt-3 text-sm font-medium text-red-600">{errorMessage}</p> : null}
-          {successMessage ? (
-            <Badge variant="outline" className="mt-3 border-emerald-200 bg-emerald-50 text-emerald-700">
-              {successMessage}
-            </Badge>
-          ) : null}
         </CardContent>
       </Card>
     </section>

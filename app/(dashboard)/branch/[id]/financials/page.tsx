@@ -7,6 +7,7 @@ import {
   MONTHLY_PNL_EXPENSE_CATEGORIES,
   type MonthlyPnLDeductionCategory,
   type MonthlyPnLExpenseCategory,
+  isVendorPayableCategory,
 } from '@/lib/finance/monthly-pnl';
 
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,8 @@ export default async function BranchFinancialsPage({
 
   const supabase = await createClient();
 
-  const [{ data: branch }, { data: salesRows }, { data: expenseRows }] = await Promise.all([
+  const [{ data: branch }, { data: salesRows }, { data: expenseRows }, { data: vendorInvoiceRows }] =
+    await Promise.all([
     supabase.from('branches').select('name').eq('id', id).single(),
     supabase
       .from('sales')
@@ -91,6 +93,12 @@ export default async function BranchFinancialsPage({
       .select('category, amount, receipt_url')
       .eq('branch_id', id)
       .eq('month_period', selectedPeriod),
+    supabase
+      .from('vendor_invoices')
+      .select('vendor_name, amount')
+      .eq('branch_id', id)
+      .gte('invoice_date', selectedStart)
+      .lte('invoice_date', selectedEnd),
   ]);
 
   if (!branch) notFound();
@@ -114,6 +122,13 @@ export default async function BranchFinancialsPage({
       amount: Number(row.amount ?? 0) || 0,
       receiptUrl: row.receipt_url ? String(row.receipt_url) : null,
     });
+  }
+
+  const vendorTotals = new Map<string, number>();
+  for (const row of vendorInvoiceRows ?? []) {
+    const vendorName = String(row.vendor_name ?? '');
+    const current = vendorTotals.get(vendorName) ?? 0;
+    vendorTotals.set(vendorName, current + (Number(row.amount ?? 0) || 0));
   }
 
   const { data: laborSnapshots } = await supabase
@@ -163,14 +178,38 @@ export default async function BranchFinancialsPage({
     const fallbackAmount = record?.amount ?? 0;
     const isLabor = category === 'Labor';
     const isWarehouse = category === 'Warehouse';
-    const amount = isLabor ? laborAutoFill : isWarehouse ? warehouseAutoFill : fallbackAmount;
+    const isVendorCategory = isVendorPayableCategory(category);
+    const vendorAmount = vendorTotals.get(category) ?? 0;
+    const amount = isLabor
+      ? laborAutoFill
+      : isWarehouse
+        ? warehouseAutoFill
+        : isVendorCategory
+          ? vendorAmount
+          : fallbackAmount;
+    const readOnly = isLabor || isWarehouse || isVendorCategory;
+    const helperLinkHref = isLabor
+      ? `/branch/${id}/staffing`
+      : isWarehouse
+        ? `/branch/${id}/warehouse`
+        : isVendorCategory
+          ? `/branch/${id}/vendors?period=${selectedPeriod}`
+          : undefined;
+    const helperLinkLabel = isLabor
+      ? 'View Payroll'
+      : isWarehouse
+        ? 'View Warehouse'
+        : isVendorCategory
+          ? 'View Vendors'
+          : undefined;
+
     return {
       category: category as MonthlyPnLExpenseCategory,
       amount: Number(amount.toFixed(2)),
       receiptUrl: record?.receiptUrl ?? null,
-      readOnly: isLabor || isWarehouse,
-      helperLinkHref: isLabor ? `/branch/${id}/staffing` : isWarehouse ? `/branch/${id}/warehouse` : undefined,
-      helperLinkLabel: isLabor ? 'View Payroll' : isWarehouse ? 'View Warehouse' : undefined,
+      readOnly,
+      helperLinkHref,
+      helperLinkLabel,
     };
   });
 

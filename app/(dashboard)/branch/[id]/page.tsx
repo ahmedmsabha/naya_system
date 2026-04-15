@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Warehouse, Users, BarChart3, Settings, ChevronRight, Wallet } from "lucide-react";
+import { ArrowLeft, Warehouse, Users, BarChart3, Settings, ChevronRight, Wallet, Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 
@@ -50,6 +50,13 @@ export default async function BranchDashboard({
       title: "Financials",
       subtitle: "P&L Reports",
       icon: BarChart3,
+    },
+    {
+      id: "vendors",
+      href: `/branch/${id}/vendors`,
+      title: "Vendors",
+      subtitle: "Invoices & Payables",
+      icon: Truck,
     },
     {
       id: "settings",
