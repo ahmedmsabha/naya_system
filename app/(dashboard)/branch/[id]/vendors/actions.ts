@@ -8,6 +8,10 @@ import {
   type VendorPayableCategory,
 } from '@/lib/finance/monthly-pnl';
 import { generateVendorSmartCommentary } from '@/lib/ai/financial-commentary';
+import {
+  periodKeyFromDateIso,
+  syncVendorExpensesForPeriod,
+} from '@/lib/finance/transaction-sync';
 
 type ActionResult<T = undefined> = {
   success: boolean;
@@ -246,6 +250,12 @@ export async function addVendorInvoiceAction(
 
   if (error) return { success: false, error: error.message };
 
+  await syncVendorExpensesForPeriod(
+    supabase,
+    input.branchId,
+    periodKeyFromDateIso(input.invoiceDate),
+  );
+
   revalidatePath(`/branch/${input.branchId}/vendors`);
   revalidatePath(`/branch/${input.branchId}/financials`);
   return {
@@ -264,13 +274,23 @@ export async function deleteVendorInvoiceAction(
   if (!input.invoiceId) return { success: false, error: 'Missing invoice id.' };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: deletedInvoice, error } = await supabase
     .from('vendor_invoices')
     .delete()
+    .select('invoice_date')
     .eq('id', input.invoiceId)
-    .eq('branch_id', input.branchId);
+    .eq('branch_id', input.branchId)
+    .single();
 
   if (error) return { success: false, error: error.message };
+
+  if (deletedInvoice?.invoice_date) {
+    await syncVendorExpensesForPeriod(
+      supabase,
+      input.branchId,
+      periodKeyFromDateIso(String(deletedInvoice.invoice_date)),
+    );
+  }
 
   revalidatePath(`/branch/${input.branchId}/vendors`);
   revalidatePath(`/branch/${input.branchId}/financials`);

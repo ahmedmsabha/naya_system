@@ -295,6 +295,8 @@ export default async function BranchFinancialsPage({
         monthHrefPrev={`/branch/${id}/financials?period=${addMonths(selectedPeriod, -1)}`}
         monthHrefNext={`/branch/${id}/financials?period=${addMonths(selectedPeriod, 1)}`}
         varianceHref={`/branch/${id}/financials/variance?period=${selectedPeriod}`}
+        vendorsHref={`/branch/${id}/vendors?period=${selectedPeriod}`}
+        accountantHref="/accountant"
         grossSales={grossSales}
         insights={insights}
         initialRows={expenseTableRows}

@@ -50,7 +50,7 @@ function fallbackCommentary(payload: CommentaryPayload): string[] {
 }
 
 export async function generateFinancialCommentary(payload: CommentaryPayload): Promise<string[]> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return fallbackCommentary(payload);
 
   const contextJson = JSON.stringify(payload.context, null, 2);
@@ -83,19 +83,26 @@ ${contextJson}
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     const raw = result.response.text();
     const cleaned = cleanModelText(raw);
     const parsed = JSON.parse(cleaned) as { insights?: unknown };
-    if (!Array.isArray(parsed.insights)) return fallbackCommentary(payload);
+    if (Array.isArray(parsed.insights)) {
+      const insights = parsed.insights
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      if (insights.length === 3) return insights;
+    }
 
-    const insights = parsed.insights
-      .map((value) => String(value).trim())
+    const lines = cleaned
+      .split('\n')
+      .map((line) => line.replace(/^[-*\d.\s]+/, '').trim())
       .filter(Boolean)
       .slice(0, 3);
+    if (lines.length === 3) return lines;
 
-    if (insights.length === 3 && parsed.insights.length === 3) return insights;
     return fallbackCommentary(payload);
   } catch {
     return fallbackCommentary(payload);
@@ -125,7 +132,7 @@ function fallbackVendorCommentary(payload: VendorCommentaryPayload): string[] {
 export async function generateVendorSmartCommentary(
   payload: VendorCommentaryPayload,
 ): Promise<string[]> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return fallbackVendorCommentary(payload);
 
   const contextJson = JSON.stringify(payload.context, null, 2);
@@ -159,19 +166,26 @@ ${contextJson}
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     const raw = result.response.text();
     const cleaned = cleanModelText(raw);
     const parsed = JSON.parse(cleaned) as { insights?: unknown };
-    if (!Array.isArray(parsed.insights)) return fallbackVendorCommentary(payload);
+    if (Array.isArray(parsed.insights)) {
+      const insights = parsed.insights
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      if (insights.length === 3) return insights;
+    }
 
-    const insights = parsed.insights
-      .map((value) => String(value).trim())
+    const lines = cleaned
+      .split('\n')
+      .map((line) => line.replace(/^[-*\d.\s]+/, '').trim())
       .filter(Boolean)
       .slice(0, 3);
+    if (lines.length === 3) return lines;
 
-    if (insights.length === 3 && parsed.insights.length === 3) return insights;
     return fallbackVendorCommentary(payload);
   } catch {
     return fallbackVendorCommentary(payload);

@@ -24,6 +24,8 @@ type FinancialsDashboardClientProps = {
   monthHrefPrev: string;
   monthHrefNext: string;
   varianceHref: string;
+  vendorsHref: string;
+  accountantHref: string;
   grossSales: number;
   initialRows: ExpenseRow[];
   initialDeductions: DeductionValues;
@@ -72,6 +74,8 @@ export function FinancialsDashboardClient({
   monthHrefPrev,
   monthHrefNext,
   varianceHref,
+  vendorsHref,
+  accountantHref,
   grossSales,
   initialRows,
   initialDeductions,
@@ -90,6 +94,8 @@ export function FinancialsDashboardClient({
       monthHrefPrev={monthHrefPrev}
       monthHrefNext={monthHrefNext}
       varianceHref={varianceHref}
+      vendorsHref={vendorsHref}
+      accountantHref={accountantHref}
       grossSales={grossSales}
       totalDeductions={metrics.totalDeductions}
       netTotal={metrics.netTotal}

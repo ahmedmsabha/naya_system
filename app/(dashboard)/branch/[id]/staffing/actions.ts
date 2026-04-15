@@ -2,6 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import {
+  syncLaborExpenseForPeriod,
+} from "@/lib/finance/transaction-sync";
 
 function monthKeyNow(): string {
   const d = new Date();
@@ -131,7 +134,10 @@ export async function addStaff(formData: FormData) {
   });
   if ("error" in insertRes) return insertRes;
 
+  await syncLaborExpenseForPeriod(supabase, branchId, monthKeyFromDate(effectiveMonth));
+
   revalidatePath(`/branch/${branchId}/staffing`);
+  revalidatePath(`/branch/${branchId}/financials`);
   return { success: true };
 }
 
@@ -191,7 +197,10 @@ export async function bulkAddStaff(formData: FormData) {
     inserted += 1;
   }
 
+  await syncLaborExpenseForPeriod(supabase, branchId, monthKeyFromDate(selectedPeriod));
+
   revalidatePath(`/branch/${branchId}/staffing`);
+  revalidatePath(`/branch/${branchId}/financials`);
   return { success: true, inserted };
 }
 
@@ -204,7 +213,10 @@ export async function deleteStaff(formData: FormData) {
   const { error } = await supabase.from("branch_staff").delete().eq("id", staffId).eq("branch_id", branchId);
   if (error) return { error: error.message };
 
+  await syncLaborExpenseForPeriod(supabase, branchId, monthKeyNow());
+
   revalidatePath(`/branch/${branchId}/staffing`);
+  revalidatePath(`/branch/${branchId}/financials`);
   return { success: true };
 }
 
@@ -264,7 +276,14 @@ export async function upsertStaffingSnapshot(formData: FormData) {
   });
   if ("error" in insertRes) return insertRes;
 
+  await syncLaborExpenseForPeriod(
+    supabase,
+    branchId,
+    monthKeyFromDate(periodToMonthStart(selectedPeriod)),
+  );
+
   revalidatePath(`/branch/${branchId}/staffing`);
+  revalidatePath(`/branch/${branchId}/financials`);
   return { success: true, period: monthKeyFromDate(periodToMonthStart(selectedPeriod)) };
 }
 

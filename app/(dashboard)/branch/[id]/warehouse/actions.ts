@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getWeekDatesForDate, parseWarehouseIsoDate, type WeekdayKey } from "@/lib/warehouse/week-dates";
+import {
+  periodKeyFromDateIso,
+  syncWarehouseExpenseForPeriod,
+} from "@/lib/finance/transaction-sync";
 
 // ─── Inventory Items ────────────────────────────────────────────────────────
 
@@ -315,13 +319,30 @@ export async function deleteArchivedInvoice(formData: FormData) {
   const invoiceId = formData.get("invoice_id") as string;
   const branchId = formData.get("branch_id") as string;
 
-  const { error } = await supabase
+  const { data: deletedInvoice, error } = await supabase
     .from("warehouse_invoices")
     .delete()
-    .eq("id", invoiceId);
+    .select("billing_period_start, billing_period_end")
+    .eq("id", invoiceId)
+    .single();
 
   if (error) return { error: error.message };
+
+  const periods = new Set<string>();
+  if (deletedInvoice?.billing_period_start) {
+    periods.add(periodKeyFromDateIso(String(deletedInvoice.billing_period_start)));
+  }
+  if (deletedInvoice?.billing_period_end) {
+    periods.add(periodKeyFromDateIso(String(deletedInvoice.billing_period_end)));
+  }
+  await Promise.all(
+    Array.from(periods).map((period) =>
+      syncWarehouseExpenseForPeriod(supabase, branchId, period),
+    ),
+  );
+
   revalidatePath(`/branch/${branchId}/warehouse/archive`);
+  revalidatePath(`/branch/${branchId}/financials`);
   return { success: true };
 }
 
@@ -465,10 +486,18 @@ export async function upsertWeeklyInvoice(formData: FormData) {
       if (insertItemsError) throw new Error(insertItemsError.message);
     }
 
+    const periods = Array.from(
+      new Set([periodKeyFromDateIso(weekStartIso), periodKeyFromDateIso(weekEndIso)]),
+    );
+    await Promise.all(
+      periods.map((period) => syncWarehouseExpenseForPeriod(supabase, branchId, period)),
+    );
+
     revalidatePath(`/branch/${branchId}/warehouse`);
     revalidatePath(`/branch/${branchId}/warehouse/invoice`);
     revalidatePath(`/branch/${branchId}/warehouse/archive`);
     revalidatePath(`/branch/${branchId}/warehouse/schedule`);
+    revalidatePath(`/branch/${branchId}/financials`);
     return {
       success: true,
       invoice_id: invoiceId,
