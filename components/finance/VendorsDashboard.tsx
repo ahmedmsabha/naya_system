@@ -361,29 +361,29 @@ export function VendorsDashboard({
 
   return (
     <section className="space-y-6" dir="ltr">
-      <Card className="overflow-hidden rounded-[2rem] border border-slate-200 bg-gradient-to-r from-[#0b1220] via-[#0f172a] to-[#172554] p-8 text-white shadow-[0_24px_60px_rgba(15,23,42,0.28)]">
+      <Card className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
-            <Badge className="rounded-full border border-white/20 bg-white/10 text-white">
+            <Badge className="rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700">
               <Sparkles className="mr-1 h-3.5 w-3.5" />
               Vendors & Payables
             </Badge>
-            <h1 className="text-3xl font-black tracking-tight md:text-4xl">
+            <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
               {branchName} Vendor Control Center
             </h1>
-            <p className="max-w-2xl text-sm text-slate-200">
+            <p className="max-w-2xl text-sm text-slate-600">
               Track invoice activity by category, monitor monthly spend, and keep receipts ready for
               accounting reviews.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-right backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-right">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Total Spend ({monthLabel})
             </p>
-            <p className="mt-1 text-3xl font-black">{formatCurrency(totalForMonth)}</p>
+            <p className="mt-1 text-3xl font-black text-slate-950">{formatCurrency(totalForMonth)}</p>
             <Link
               href={`/branch/${branchId}/financials?period=${selectedPeriod}`}
-              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cyan-200 hover:text-white"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
             >
               View Monthly P&L
               <ArrowUpRight className="h-3.5 w-3.5" />
@@ -404,7 +404,12 @@ export function VendorsDashboard({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button variant="outline" onClick={onOpenSmartAnalysis} disabled={isGeneratingSmartReport}>
+        <Button
+          variant="outline"
+          className="rounded-xl border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+          onClick={onOpenSmartAnalysis}
+          disabled={isGeneratingSmartReport}
+        >
           {isGeneratingSmartReport ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -412,7 +417,12 @@ export function VendorsDashboard({
           )}
           Smart Report
         </Button>
-        <Button variant="default" onClick={onExportPdf} disabled={isExportingPdf || isGeneratingSmartReport}>
+        <Button
+          variant="default"
+          className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700"
+          onClick={onExportPdf}
+          disabled={isExportingPdf || isGeneratingSmartReport}
+        >
           {isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           Export PDF
         </Button>
@@ -427,7 +437,7 @@ export function VendorsDashboard({
           return (
             <Card
               key={summary.vendor}
-              className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
+              className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-[0_10px_26px_rgba(15,23,42,0.07)] transition-shadow hover:shadow-[0_16px_32px_rgba(15,23,42,0.1)]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -446,14 +456,14 @@ export function VendorsDashboard({
                   <AreaChart data={summary.points}>
                     <defs>
                       <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0f172a" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="#0f172a" stopOpacity={0.02} />
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0.01} />
                       </linearGradient>
                     </defs>
                     <Area
                       type="monotone"
                       dataKey="total"
-                      stroke="#0f172a"
+                      stroke="#6366f1"
                       strokeWidth={2}
                       fill={`url(#${gradientId})`}
                       fillOpacity={1}
@@ -475,7 +485,7 @@ export function VendorsDashboard({
               </div>
 
               <Button
-                className="mt-4 w-full rounded-xl"
+                className="mt-4 w-full rounded-xl bg-indigo-600 text-white hover:bg-indigo-700"
                 onClick={() => openModal(summary.vendor)}
                 disabled={isSubmittingInvoice || isDeletingInvoice || isUploadingReceipt}
               >
@@ -496,7 +506,7 @@ export function VendorsDashboard({
                   recent.map((invoice) => (
                     <div
                       key={invoice.id}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-slate-900">
@@ -553,7 +563,7 @@ export function VendorsDashboard({
           </Badge>
         </div>
 
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
           <table className="min-w-[800px] w-full border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.16em] text-slate-500">
@@ -571,7 +581,10 @@ export function VendorsDashboard({
                     (isDeletingInvoice && deletingInvoiceId === invoice.id) ||
                     (isUploadingReceipt && uploadingInvoiceId === invoice.id);
                   return (
-                    <tr key={invoice.id} className={`border-b border-slate-100 ${isRowPending ? 'opacity-70 pointer-events-none' : ''}`}>
+                    <tr
+                      key={invoice.id}
+                      className={`border-b border-slate-100 bg-white hover:bg-slate-50/50 ${isRowPending ? 'opacity-70 pointer-events-none' : ''}`}
+                    >
                       <td className="px-3 py-3 text-sm font-semibold text-slate-900">{invoice.vendorName}</td>
                       <td className="px-3 py-3 text-sm text-slate-600">{formatDate(invoice.invoiceDate)}</td>
                       <td className="px-3 py-3 text-sm font-semibold text-slate-900">
@@ -595,6 +608,7 @@ export function VendorsDashboard({
                           <Button
                             size="sm"
                             variant="outline"
+                            className="rounded-lg border-slate-300"
                             onClick={() => window.open(invoice.receiptUrl ?? '', '_blank')}
                             disabled={isRowPending}
                           >
@@ -612,6 +626,7 @@ export function VendorsDashboard({
                           <Button
                             size="sm"
                             variant="outline"
+                            className="rounded-lg border-slate-300"
                             disabled={isRowPending}
                             onClick={() => uploadInputRefs.current[invoice.id]?.click()}
                           >
@@ -655,7 +670,7 @@ export function VendorsDashboard({
       {activeVendor ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
           <Card
-            className={`w-full max-w-lg rounded-[1.6rem] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.4)] ${
+            className={`w-full max-w-lg rounded-[1.6rem] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)] ${
               isSubmittingInvoice ? 'opacity-70 pointer-events-none' : ''
             }`}
           >
@@ -728,7 +743,11 @@ export function VendorsDashboard({
               <Button variant="outline" onClick={closeModal} disabled={isSubmittingInvoice}>
                 Cancel
               </Button>
-              <Button onClick={onSubmitInvoice} disabled={isSubmittingInvoice}>
+              <Button
+                className="bg-indigo-600 text-white hover:bg-indigo-700"
+                onClick={onSubmitInvoice}
+                disabled={isSubmittingInvoice}
+              >
                 {isSubmittingInvoice ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (

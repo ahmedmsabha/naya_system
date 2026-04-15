@@ -65,11 +65,11 @@ export function VendorSmartAnalysis({
 }: VendorSmartAnalysisProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto p-0">
-        <div className="border-b border-slate-200 bg-slate-950 px-6 py-5 text-white">
+      <DialogContent className="max-h-[90vh] overflow-y-auto p-0" dir="ltr">
+        <div className="border-b border-slate-200 bg-white px-6 py-5">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-white">Vendor Smart Report</DialogTitle>
-            <DialogDescription className="text-slate-300">
+            <DialogTitle className="text-2xl font-black text-slate-950">Vendor Smart Report</DialogTitle>
+            <DialogDescription className="text-slate-600">
               Executive-grade risk signals generated from six-month vendor behavior and AI analysis.
             </DialogDescription>
           </DialogHeader>
@@ -77,10 +77,10 @@ export function VendorSmartAnalysis({
 
         <div className="space-y-6 px-6 py-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <Badge className="rounded-full border border-slate-200 bg-slate-100 text-slate-700">
+            <Badge className="rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700">
               Strategic Vendor Intelligence
             </Badge>
-            <Button onClick={onGenerate} disabled={isPending}>
+            <Button className="bg-indigo-600 text-white hover:bg-indigo-700" onClick={onGenerate} disabled={isPending}>
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
               {isPending ? 'Generating...' : 'Generate Smart Report'}
             </Button>
@@ -89,25 +89,25 @@ export function VendorSmartAnalysis({
           {errorMessage ? <p className="text-sm font-semibold text-red-500">{errorMessage}</p> : null}
 
           <div className={`grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Concentration Risk</p>
               <p className="mt-2 text-2xl font-black text-slate-900">{formatPercent(data?.concentrationPct ?? 0)}</p>
               <p className="mt-1 text-sm text-slate-600">Top Vendor: {data?.concentrationVendor ?? '-'}</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Forecasted Liability</p>
               <p className="mt-2 text-2xl font-black text-slate-900">{formatCurrency(data?.forecastLiability ?? 0)}</p>
               <p className="mt-1 text-sm text-slate-600">Projected next-month vendor spend</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Highest Volatility</p>
               <p className="mt-2 text-xl font-black text-slate-900">{data?.highestVolatilityVendor ?? '-'}</p>
               <p className="mt-1 text-sm text-slate-600">Score {Number(data?.volatilityScore ?? 0).toFixed(3)}</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Current Month Spend</p>
               <p className="mt-2 text-2xl font-black text-slate-900">
                 {formatCurrency(data?.totalCurrentMonthSpend ?? 0)}
@@ -116,16 +116,16 @@ export function VendorSmartAnalysis({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">AI Executive Takeaways</p>
             <div className="mt-3 space-y-3">
               {(data?.insights ?? []).length > 0 ? (
                 data?.insights.map((insight) => (
                   <div
                     key={insight}
-                    className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                    className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
                   >
-                    <TrendingUp className="mt-0.5 h-4 w-4 text-slate-600" />
+                    <TrendingUp className="mt-0.5 h-4 w-4 text-indigo-600" />
                     <p className="text-sm font-medium text-slate-800">{insight}</p>
                   </div>
                 ))
