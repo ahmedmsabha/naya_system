@@ -399,7 +399,7 @@ export function ExecutiveFinancialDashboard({
                 <XAxis dataKey="label" tick={{ fill: '#475569', fontSize: 11 }} />
                 <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} tick={{ fill: '#475569', fontSize: 11 }} />
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(Number(value))}
+                  formatter={(value) => formatCurrency(Number(value ?? 0))}
                   contentStyle={{ borderRadius: 10, border: '1px solid #cbd5e1' }}
                 />
                 <Area
