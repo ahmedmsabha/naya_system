@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Menu, Settings, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { navigation } from "@/components/layout/Sidebar";
 
@@ -28,9 +28,21 @@ export function TopHeader() {
     }
   }
 
-  useEffect(() => {
+  // Close mobile menu on route change without using setState in an effect.
+  // useSyncExternalStore is used here only as a stable subscription; the
+  // real dependency is pathname which triggers a re-render.
+  useSyncExternalStore(
+    () => () => {},
+    () => pathname,
+  );
+  // When pathname changes between renders the component re-renders and the
+  // state initialiser below resets the menu. We keep the menu in a ref-like
+  // derived state: if the pathname changed we reset it.
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
     setIsMobileMenuOpen(false);
-  }, [pathname]);
+    setPrevPathname(pathname);
+  }
 
   return (
     <>

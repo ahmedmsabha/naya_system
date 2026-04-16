@@ -8,6 +8,13 @@ import {
   type MonthlyPnLExpenseCategory,
   isMonthlyPnLCategory,
 } from '@/lib/finance/monthly-pnl';
+import {
+  deleteSupplierFormSchema,
+  safeParseFinancialsForm,
+  supplierFormSchema,
+  upsertDeductionsSchema,
+  upsertExpenseSchema,
+} from './schemas';
 
 function isBlockedVendorName(name: string): boolean {
   const normalized = name.trim().toLowerCase();
@@ -15,9 +22,12 @@ function isBlockedVendorName(name: string): boolean {
 }
 
 export async function addSuppliersAction(formData: FormData) {
-  const branchId = String(formData.get('branch_id') ?? '');
-  const singleVendor = String(formData.get('vendor_name') ?? '').trim();
-  const rawNames = String(formData.get('vendor_names') ?? '[]');
+  const parsedForm = safeParseFinancialsForm(supplierFormSchema, formData);
+  if (!parsedForm.success) return { success: false, error: 'Invalid supplier payload.' };
+
+  const branchId = parsedForm.data.branch_id;
+  const singleVendor = parsedForm.data.vendor_name.trim();
+  const rawNames = parsedForm.data.vendor_names;
 
   const parsedNames: string[] = (() => {
     try {
@@ -35,7 +45,7 @@ export async function addSuppliersAction(formData: FormData) {
     .filter((name) => name.length > 0)
     .filter((name) => !isBlockedVendorName(name));
 
-  if (!branchId || candidates.length === 0) return;
+  if (!branchId || candidates.length === 0) return { success: false, error: 'No suppliers to add.' };
 
   const supabase = await createClient();
   const { data: existingRows } = await supabase
@@ -59,17 +69,21 @@ export async function addSuppliersAction(formData: FormData) {
   }
 
   revalidatePath(`/branch/${branchId}/financials`);
+  return { success: true };
 }
 
 export async function deleteSupplierAction(formData: FormData) {
-  const branchId = String(formData.get('branch_id') ?? '');
-  const supplierId = String(formData.get('supplier_id') ?? '');
-  if (!branchId || !supplierId) return;
+  const parsedForm = safeParseFinancialsForm(deleteSupplierFormSchema, formData);
+  if (!parsedForm.success) return { success: false, error: 'Invalid supplier delete payload.' };
+
+  const branchId = parsedForm.data.branch_id;
+  const supplierId = parsedForm.data.supplier_id;
 
   const supabase = await createClient();
   await supabase.from('suppliers').delete().eq('id', supplierId);
 
   revalidatePath(`/branch/${branchId}/financials`);
+  return { success: true };
 }
 
 type UpsertExpenseInput = {
@@ -112,29 +126,30 @@ async function uploadReceiptToStorage(
 }
 
 export async function upsertExpense(input: UpsertExpenseInput): Promise<UpsertExpenseResult> {
-  if (!input.branchId) return { success: false, error: 'Missing branch id.' };
-  if (!validateMonthPeriod(input.monthPeriod)) {
+  const parsedInput = upsertExpenseSchema.safeParse(input);
+  if (!parsedInput.success) {
+    return { success: false, error: 'Invalid expense payload.' };
+  }
+
+  if (!validateMonthPeriod(parsedInput.data.monthPeriod)) {
     return { success: false, error: 'Month period must be in YYYY-MM format.' };
   }
-  if (!isMonthlyPnLCategory(input.category)) {
+  if (!isMonthlyPnLCategory(parsedInput.data.category)) {
     return { success: false, error: 'Invalid expense category.' };
   }
 
-  const amount = Number(input.amount);
-  if (!Number.isFinite(amount) || amount < 0) {
-    return { success: false, error: 'Amount must be a non-negative number.' };
-  }
+  const amount = Number(parsedInput.data.amount);
 
   const supabase = await createClient();
   let receiptUrl: string | undefined;
 
-  if (input.file) {
+  if (parsedInput.data.file) {
     const uploaded = await uploadReceiptToStorage(
       supabase,
-      input.branchId,
-      input.monthPeriod,
-      input.category,
-      input.file,
+      parsedInput.data.branchId,
+      parsedInput.data.monthPeriod,
+      parsedInput.data.category,
+      parsedInput.data.file,
     );
     if (uploaded.error) return { success: false, error: uploaded.error };
     receiptUrl = uploaded.receiptUrl;
@@ -147,9 +162,9 @@ export async function upsertExpense(input: UpsertExpenseInput): Promise<UpsertEx
     amount: number;
     receipt_url?: string;
   } = {
-    branch_id: input.branchId,
-    month_period: input.monthPeriod,
-    category: input.category,
+    branch_id: parsedInput.data.branchId,
+    month_period: parsedInput.data.monthPeriod,
+    category: parsedInput.data.category,
     amount: Number(amount.toFixed(2)),
   };
 
@@ -161,7 +176,7 @@ export async function upsertExpense(input: UpsertExpenseInput): Promise<UpsertEx
 
   if (error) return { success: false, error: error.message };
 
-  revalidatePath(`/branch/${input.branchId}/financials`);
+  revalidatePath(`/branch/${parsedInput.data.branchId}/financials`);
   return { success: true, receiptUrl: receiptUrl ?? null };
 }
 
@@ -174,19 +189,20 @@ type UpsertDeductionsInput = {
 export async function upsertDeductions(
   input: UpsertDeductionsInput,
 ): Promise<{ success: boolean; error?: string }> {
-  if (!input.branchId) return { success: false, error: 'Missing branch id.' };
-  if (!validateMonthPeriod(input.monthPeriod)) {
+  const parsedInput = upsertDeductionsSchema.safeParse(input);
+  if (!parsedInput.success) return { success: false, error: 'Invalid deductions payload.' };
+  if (!validateMonthPeriod(parsedInput.data.monthPeriod)) {
     return { success: false, error: 'Month period must be in YYYY-MM format.' };
   }
 
   const rows = MONTHLY_PNL_DEDUCTION_CATEGORIES.map((category) => {
-    const amount = Number(input.values[category] ?? 0);
+    const amount = Number(parsedInput.data.values[category] ?? 0);
     if (!Number.isFinite(amount) || amount < 0) {
       throw new Error(`Invalid amount for ${category}.`);
     }
     return {
-      branch_id: input.branchId,
-      month_period: input.monthPeriod,
+      branch_id: parsedInput.data.branchId,
+      month_period: parsedInput.data.monthPeriod,
       category,
       amount: Number(amount.toFixed(2)),
     };
@@ -200,7 +216,7 @@ export async function upsertDeductions(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/branch/${input.branchId}/financials`);
+    revalidatePath(`/branch/${parsedInput.data.branchId}/financials`);
     return { success: true };
   } catch (error) {
     return {

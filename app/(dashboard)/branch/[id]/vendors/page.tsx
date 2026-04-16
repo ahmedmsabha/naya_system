@@ -7,6 +7,7 @@ import {
   type VendorPayableCategory,
 } from '@/lib/finance/monthly-pnl';
 import { VendorsDashboard } from '@/components/finance/VendorsDashboard';
+import { addMonths, monthEndIso, monthKeyNow, monthLabel, monthStartIso, parsePeriod, shortMonthLabel } from '@/lib/domain/date';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,36 +26,6 @@ type VendorTrendPoint = {
   total: number;
 };
 
-function monthKeyFromDate(input: Date): string {
-  return `${input.getFullYear()}-${String(input.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthKeyNow(): string {
-  return monthKeyFromDate(new Date());
-}
-
-function monthStartIso(period: string): string {
-  return `${period}-01`;
-}
-
-function monthEndIso(period: string): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + 1);
-  d.setDate(0);
-  return `${period}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function addMonths(period: string, delta: number): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + delta);
-  return monthKeyFromDate(d);
-}
-
-function shortMonthLabel(period: string): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  return d.toLocaleDateString('en-US', { month: 'short' });
-}
-
 function monthSequence(period: string, months: number): string[] {
   const sequence: string[] = [];
   for (let i = months - 1; i >= 0; i -= 1) {
@@ -72,9 +43,7 @@ export default async function BranchVendorsPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const selectedPeriod = /^\d{4}-\d{2}$/.test(String(sp.period ?? ''))
-    ? String(sp.period)
-    : monthKeyNow();
+  const selectedPeriod = parsePeriod(sp.period, monthKeyNow());
 
   const selectedStart = monthStartIso(selectedPeriod);
   const selectedEnd = monthEndIso(selectedPeriod);
@@ -151,10 +120,7 @@ export default async function BranchVendorsPage({
     }));
   }
 
-  const monthLabel = new Date(`${selectedPeriod}-01T12:00:00`).toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  });
+  const currentMonthLabel = monthLabel(selectedPeriod);
 
   return (
     <div className="w-full space-y-6">
@@ -177,7 +143,7 @@ export default async function BranchVendorsPage({
           </Link>
           <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2">
             <CalendarDays className="h-4 w-4 text-slate-500" />
-            <span className="text-sm font-semibold text-slate-800">{monthLabel}</span>
+            <span className="text-sm font-semibold text-slate-800">{currentMonthLabel}</span>
           </div>
           <Link
             href={`/branch/${id}/vendors?period=${addMonths(selectedPeriod, 1)}`}
@@ -193,7 +159,7 @@ export default async function BranchVendorsPage({
         branchId={id}
         branchName={String(branch.name ?? '')}
         selectedPeriod={selectedPeriod}
-        monthLabel={monthLabel}
+        monthLabel={currentMonthLabel}
         initialInvoices={initialInvoices}
         initialMonthlyTotals={monthlyTotals}
         trendSeriesByVendor={vendorTrendSeries}

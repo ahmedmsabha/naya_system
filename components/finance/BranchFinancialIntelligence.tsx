@@ -88,6 +88,14 @@ export function BranchFinancialIntelligence({
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
 
+  const addSupplierFormAction = async (formData: FormData): Promise<void> => {
+    await addSuppliersAction(formData);
+  };
+
+  const deleteSupplierFormAction = async (formData: FormData): Promise<void> => {
+    await deleteSupplierAction(formData);
+  };
+
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -282,7 +290,7 @@ export function BranchFinancialIntelligence({
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
-                    <form action={addSuppliersAction}>
+                    <form action={addSupplierFormAction}>
                       <input
                         type="hidden"
                         name="branch_id"
@@ -309,7 +317,7 @@ export function BranchFinancialIntelligence({
               )}
             </div>
             <form
-              action={addSuppliersAction}
+              action={addSupplierFormAction}
               className="mt-2"
             >
               <input
@@ -335,7 +343,7 @@ export function BranchFinancialIntelligence({
 
           <div className="mt-3 flex items-center gap-2">
             <form
-              action={addSuppliersAction}
+              action={addSupplierFormAction}
               className="flex-1 flex gap-2"
             >
               <input
@@ -374,7 +382,7 @@ export function BranchFinancialIntelligence({
                   <span className="truncate">
                     {supplier.name}
                   </span>
-                  <form action={deleteSupplierAction}>
+                  <form action={deleteSupplierFormAction}>
                     <input
                       type="hidden"
                       name="branch_id"

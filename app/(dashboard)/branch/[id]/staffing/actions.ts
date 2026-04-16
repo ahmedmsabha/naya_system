@@ -5,6 +5,15 @@ import { revalidatePath } from "next/cache";
 import {
   syncLaborExpenseForPeriod,
 } from "@/lib/finance/transaction-sync";
+import {
+  addStaffSchema,
+  bulkAddStaffSchema,
+  deleteStaffSchema,
+  safeParseStaffingForm,
+  staffIdSchema,
+  syncPayrollSchema,
+  upsertStaffingSnapshotSchema,
+} from "./schemas";
 
 function monthKeyNow(): string {
   const d = new Date();
@@ -71,26 +80,27 @@ async function insertSnapshot(
 }
 
 export async function addStaff(formData: FormData) {
-  const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  const fullName = String(formData.get("full_name") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim() || null;
-  const phone = String(formData.get("phone") ?? "").trim() || null;
-  const employeeCode = String(formData.get("employee_code") ?? "").trim() || null;
-  const adpStatus = String(formData.get("adp_status") ?? "not_connected");
+  const parsed = safeParseStaffingForm(addStaffSchema, formData);
+  if (!parsed.success) return { error: "Invalid staff payload" };
 
-  const role = String(formData.get("role") ?? "crew").trim() || "crew";
-  const shift = String(formData.get("shift") ?? "full").trim() || "full";
-  const hoursPerWeek = Math.max(0, Number(formData.get("hours_per_week") ?? 40) || 40);
-  const employmentStatus = String(formData.get("status") ?? "active") as
-    | "active"
-    | "on-leave"
-    | "terminated";
-  const notes = String(formData.get("notes") ?? "").trim();
-  const salaryP1 = Math.max(0, Number(formData.get("salary_p1") ?? formData.get("salary") ?? 0) || 0);
-  const salaryP2 = Math.max(0, Number(formData.get("salary_p2") ?? formData.get("salary") ?? 0) || 0);
-  const performanceRating = Math.max(0, Math.min(5, Number(formData.get("performance_rating") ?? 0) || 0));
-  const effectiveMonth = periodToMonthStart(String(formData.get("selected_period") ?? formData.get("effective_month") ?? ""));
+  const supabase = await createClient();
+  const branchId = parsed.data.branch_id;
+  const fullName = parsed.data.full_name;
+  const email = parsed.data.email?.trim() ? parsed.data.email.trim() : null;
+  const phone = parsed.data.phone?.trim() ? parsed.data.phone.trim() : null;
+  const employeeCode = parsed.data.employee_code?.trim() ? parsed.data.employee_code.trim() : null;
+  const adpStatus = parsed.data.adp_status;
+
+  const role = parsed.data.role || "crew";
+  const shift = parsed.data.shift || "full";
+  const hoursPerWeek = parsed.data.hours_per_week;
+  const employmentStatus = parsed.data.status;
+  const notes = parsed.data.notes ?? "";
+  const salaryFallback = parsed.data.salary ?? 0;
+  const salaryP1 = parsed.data.salary_p1 ?? salaryFallback;
+  const salaryP2 = parsed.data.salary_p2 ?? salaryFallback;
+  const performanceRating = parsed.data.performance_rating;
+  const effectiveMonth = periodToMonthStart(parsed.data.selected_period ?? parsed.data.effective_month ?? "");
 
   if (!branchId) return { error: "Missing branch id" };
   if (!fullName) return { error: "Full name is required" };
@@ -142,10 +152,13 @@ export async function addStaff(formData: FormData) {
 }
 
 export async function bulkAddStaff(formData: FormData) {
+  const parsed = safeParseStaffingForm(bulkAddStaffSchema, formData);
+  if (!parsed.success) return { error: "Invalid bulk staff payload" };
+
   const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  const raw = String(formData.get("raw") ?? "");
-  const selectedPeriod = periodToMonthStart(String(formData.get("selected_period") ?? ""));
+  const branchId = parsed.data.branch_id;
+  const raw = parsed.data.raw;
+  const selectedPeriod = periodToMonthStart(parsed.data.selected_period ?? "");
 
   if (!branchId) return { error: "Missing branch id" };
   if (!raw.trim()) return { error: "Paste at least one line" };
@@ -205,10 +218,12 @@ export async function bulkAddStaff(formData: FormData) {
 }
 
 export async function deleteStaff(formData: FormData) {
+  const parsed = safeParseStaffingForm(deleteStaffSchema, formData);
+  if (!parsed.success) return { error: "Invalid staff delete payload" };
+
   const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  const staffId = String(formData.get("staff_id") ?? "");
-  if (!branchId || !staffId) return { error: "Missing ids" };
+  const branchId = parsed.data.branch_id;
+  const staffId = parsed.data.staff_id;
 
   const { error } = await supabase.from("branch_staff").delete().eq("id", staffId).eq("branch_id", branchId);
   if (error) return { error: error.message };
@@ -221,32 +236,28 @@ export async function deleteStaff(formData: FormData) {
 }
 
 export async function upsertStaffingSnapshot(formData: FormData) {
-  const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  const staffId = String(formData.get("staff_id") ?? "");
-  const selectedPeriod = String(formData.get("selected_period") ?? "");
-  const allowHistorical = String(formData.get("allow_historical") ?? "") === "1";
+  const parsed = safeParseStaffingForm(upsertStaffingSnapshotSchema, formData);
+  if (!parsed.success) return { error: "Invalid staffing snapshot payload" };
 
-  if (!branchId || !staffId || !selectedPeriod) {
-    return { error: "Missing branch, staff, or period" };
-  }
+  const supabase = await createClient();
+  const branchId = parsed.data.branch_id;
+  const staffId = parsed.data.staff_id;
+  const selectedPeriod = parsed.data.selected_period;
+  const allowHistorical = parsed.data.allow_historical === "1";
 
   const targetMonth = selectedPeriod.slice(0, 7);
   if (!allowHistorical && targetMonth < monthKeyNow()) {
     return { error: "Historical period edit requires confirmation" };
   }
 
-  const role = String(formData.get("role") ?? "crew").trim() || "crew";
-  const salaryP1 = Math.max(0, Number(formData.get("salary_p1") ?? 0) || 0);
-  const salaryP2 = Math.max(0, Number(formData.get("salary_p2") ?? 0) || 0);
-  const shift = String(formData.get("shift") ?? "full").trim() || "full";
-  const hoursPerWeek = Math.max(0, Number(formData.get("hours_per_week") ?? 40) || 40);
-  const performanceRating = Math.max(0, Math.min(5, Number(formData.get("performance_rating") ?? 0) || 0));
-  const employmentStatus = String(formData.get("status") ?? "active") as
-    | "active"
-    | "on-leave"
-    | "terminated";
-  const notes = String(formData.get("notes") ?? "").trim();
+  const role = parsed.data.role || "crew";
+  const salaryP1 = parsed.data.salary_p1;
+  const salaryP2 = parsed.data.salary_p2;
+  const shift = parsed.data.shift || "full";
+  const hoursPerWeek = parsed.data.hours_per_week;
+  const performanceRating = parsed.data.performance_rating;
+  const employmentStatus = parsed.data.status;
+  const notes = parsed.data.notes ?? "";
 
   const { data: staff, error: staffError } = await supabase
     .from("branch_staff")
@@ -288,10 +299,12 @@ export async function upsertStaffingSnapshot(formData: FormData) {
 }
 
 export async function toggleStaffAdpStatus(formData: FormData) {
+  const parsed = safeParseStaffingForm(staffIdSchema, formData);
+  if (!parsed.success) return { error: "Invalid ADP toggle payload" };
+
   const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  const staffId = String(formData.get("staff_id") ?? "");
-  if (!branchId || !staffId) return { error: "Missing ids" };
+  const branchId = parsed.data.branch_id;
+  const staffId = parsed.data.staff_id;
 
   const { data: current, error: fetchError } = await supabase
     .from("branch_staff")
@@ -314,9 +327,11 @@ export async function toggleStaffAdpStatus(formData: FormData) {
 }
 
 export async function syncPayroll(formData: FormData) {
+  const parsed = safeParseStaffingForm(syncPayrollSchema, formData);
+  if (!parsed.success) return { error: "Invalid payroll sync payload" };
+
   const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  if (!branchId) return { error: "Missing branch_id" };
+  const branchId = parsed.data.branch_id;
 
   // Placeholder: log a sync attempt. (Later: call ADP integration.)
   const { error } = await supabase.from("branch_payroll_syncs").insert({

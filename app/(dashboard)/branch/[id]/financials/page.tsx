@@ -3,6 +3,15 @@ import { createClient } from '@/lib/supabase/server';
 import { generateFinancialCommentary } from '@/lib/ai/financial-commentary';
 import { FinancialsDashboardClient } from '@/components/finance/FinancialsDashboardClient';
 import {
+  addMonths,
+  monthEndIso,
+  monthKeyNow,
+  monthLabel,
+  monthStartIso,
+  nextMonthStartIso,
+  parsePeriod,
+} from '@/lib/domain/date';
+import {
   MONTHLY_PNL_DEDUCTION_CATEGORIES,
   MONTHLY_PNL_EXPENSE_CATEGORIES,
   type MonthlyPnLDeductionCategory,
@@ -11,37 +20,6 @@ import {
 } from '@/lib/finance/monthly-pnl';
 
 export const dynamic = 'force-dynamic';
-
-function monthKeyFromDate(input: Date): string {
-  return `${input.getFullYear()}-${String(input.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthKeyNow(): string {
-  return monthKeyFromDate(new Date());
-}
-
-function monthStartIso(period: string): string {
-  return `${period}-01`;
-}
-
-function monthEndIso(period: string): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + 1);
-  d.setDate(0);
-  return `${period}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function nextMonthStartIso(period: string): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + 1);
-  return monthStartIso(monthKeyFromDate(d));
-}
-
-function addMonths(period: string, delta: number): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + delta);
-  return monthKeyFromDate(d);
-}
 
 function percentage(value: number, total: number): number {
   if (total <= 0) return 0;
@@ -68,9 +46,7 @@ export default async function BranchFinancialsPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const selectedPeriod = /^\d{4}-\d{2}$/.test(String(sp.period ?? ''))
-    ? String(sp.period)
-    : monthKeyNow();
+  const selectedPeriod = parsePeriod(sp.period, monthKeyNow());
 
   const selectedStart = monthStartIso(selectedPeriod);
   const selectedEnd = monthEndIso(selectedPeriod);
@@ -280,17 +256,14 @@ export default async function BranchFinancialsPage({
     },
   });
 
-  const monthLabel = new Date(`${selectedPeriod}-01T12:00:00`).toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  });
+  const currentMonthLabel = monthLabel(selectedPeriod);
 
   return (
     <div className="w-full" dir="ltr">
       <FinancialsDashboardClient
         branchId={id}
         branchName={String(branch.name ?? '').toUpperCase()}
-        monthLabel={monthLabel}
+        monthLabel={currentMonthLabel}
         selectedPeriod={selectedPeriod}
         monthHrefPrev={`/branch/${id}/financials?period=${addMonths(selectedPeriod, -1)}`}
         monthHrefNext={`/branch/${id}/financials?period=${addMonths(selectedPeriod, 1)}`}

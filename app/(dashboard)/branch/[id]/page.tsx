@@ -1,134 +1,159 @@
 import Link from "next/link";
-import { Card } from "@/components/ui/card";
-import { ArrowLeft, Warehouse, Users, BarChart3, Settings, ChevronRight, Wallet, Truck } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
+import type { ComponentType } from "react";
+import { ArrowLeft, BarChart3, ChevronRight, Truck, Users, Warehouse } from "lucide-react";
+import { parsePeriod, monthKeyNow, addMonths, monthLabel } from "@/lib/domain/date";
+import { formatCurrency } from "@/lib/domain/money";
+import { getBranchHubData } from "./queries";
 
 export default async function BranchDashboard({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ period?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  const selectedPeriod = parsePeriod(sp.period, monthKeyNow());
+  const data = await getBranchHubData(id, selectedPeriod);
 
-  const supabase = await createClient();
-  const { data: branch } = await supabase
-    .from("branches")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (!branch) notFound();
-
-  const branchName = branch.name;
-
-  const modules = [
+  const modules: Array<{
+    id: string;
+    href: string;
+    title: string;
+    subtitle: string;
+    icon: ComponentType<{ className?: string }>;
+    kpiLabel: string;
+    kpiValue: string;
+  }> = [
     {
       id: "warehouse",
       href: `/branch/${id}/warehouse`,
       title: "Warehouse",
-      subtitle: "Inventory & Stock",
+      subtitle: "Inventory, transfer readiness, and controls",
       icon: Warehouse,
-    },
-    {
-      id: "staffing",
-      href: `/branch/${id}/staffing`,
-      title: "Staffing",
-      subtitle: "Employee Records",
-      icon: Users,
-    },
-    {
-      id: "payroll",
-      href: `/branch/${id}/payroll`,
-      title: "Payroll",
-      subtitle: "Salary Review",
-      icon: Wallet,
+      kpiLabel: "Inventory Value",
+      kpiValue: formatCurrency(data.kpis.warehouseValue),
     },
     {
       id: "financials",
       href: `/branch/${id}/financials`,
       title: "Financials",
-      subtitle: "P&L Reports",
+      subtitle: "P&L intelligence and margin tracking",
       icon: BarChart3,
+      kpiLabel: "Net Margin",
+      kpiValue: `${data.kpis.netMarginPct.toFixed(1)}%`,
     },
     {
       id: "vendors",
       href: `/branch/${id}/vendors`,
       title: "Vendors",
-      subtitle: "Invoices & Payables",
+      subtitle: "Invoices, payables, and supplier control",
       icon: Truck,
+      kpiLabel: "Monthly Spend",
+      kpiValue: formatCurrency(data.kpis.vendorSpend),
     },
     {
-      id: "settings",
-      href: `/branch/${id}/settings`,
-      title: "Settings",
-      subtitle: "Branch Config",
-      icon: Settings,
+      id: "staffing",
+      href: `/branch/${id}/staffing`,
+      title: "Staffing",
+      subtitle: "Headcount and labor planning",
+      icon: Users,
+      kpiLabel: "Active Staff",
+      kpiValue: `${data.kpis.activeStaff}`,
     },
   ];
 
+  const periodOptions = Array.from({ length: 12 }, (_, index) => {
+    const period = addMonths(monthKeyNow(), -index);
+    return { value: period, label: monthLabel(period) };
+  });
+
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-7xl space-y-8">
       <Link
         href="/"
-        className="inline-flex items-center gap-2 text-[11px] font-bold tracking-widest text-[#a48443]/70 hover:text-[#a48443] transition-colors uppercase mb-8 focus:outline-none"
+        className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.22em] text-slate-500 hover:text-slate-700 transition-colors uppercase"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back To All Branches
+        Back To Enterprise Overview
       </Link>
 
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-16">
-        <div>
-          <h1 className="text-4xl font-black text-[#052e36] tracking-tight mb-2">
-            {branchName}
-          </h1>
-          <p className="text-gray-400 text-lg">Branch Operation Center</p>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="bg-[#eaf8f3] px-6 py-4 rounded-xl min-w-[140px] border border-[#d2f2e5]">
-            <p className="text-[10px] font-bold text-[#10b981] tracking-widest uppercase mb-1">
-              Daily Profit
+      <div className="rounded-3xl border border-slate-200 bg-white/95 p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.45)]">
+        <p className="text-xs uppercase tracking-[0.26em] font-black text-slate-500">Naya Enterprise</p>
+        <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight text-[#052e36]">
+              {data.branchName}
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Executive operations hub for monthly control and branch performance.
             </p>
-            <p className="text-3xl font-black text-[#10b981]">$12.5k</p>
           </div>
-          <div className="bg-[#eef5fe] px-6 py-4 rounded-xl min-w-[140px] border border-[#ddebfe]">
-            <p className="text-[10px] font-bold text-[#2563eb] tracking-widest uppercase mb-1">
-              Active Staff
-            </p>
-            <p className="text-3xl font-black text-[#2563eb]">12</p>
-          </div>
+          <form action="" className="w-full lg:w-auto">
+            <label htmlFor="period" className="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+              Reporting Period
+            </label>
+            <select
+              id="period"
+              name="period"
+              defaultValue={selectedPeriod}
+              className="w-full min-w-[240px] rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 shadow-inner"
+            >
+              {periodOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="mt-3 inline-flex rounded-2xl bg-[#052e36] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-slate-300/40"
+            >
+              Apply
+            </button>
+          </form>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {modules.map((module) => (
           <Link
             key={module.id}
             href={module.href}
-            className="group block focus:outline-none focus:ring-2 focus:ring-[#052e36] rounded-[2.5rem]"
+            className="group rounded-3xl border border-slate-200 bg-white p-7 shadow-[0_22px_55px_-38px_rgba(15,23,42,0.55)] transition-all hover:-translate-y-0.5 hover:shadow-[0_30px_70px_-35px_rgba(37,99,235,0.35)]"
           >
-            <Card className="h-full rounded-[2.5rem] p-10 border-gray-100 shadow-sm hover:shadow-md transition-shadow group-hover:border-gray-200 bg-white group-active:scale-[0.98] duration-200">
-              <div className="space-y-12 mb-8">
-                <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-100">
-                  <module.icon className="w-6 h-6 text-[#052e36]" strokeWidth={2} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-[#052e36] mb-2">{module.title}</h2>
-                  <p className="text-xs text-gray-400">{module.subtitle}</p>
-                </div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                <module.icon className="w-6 h-6 text-slate-700" />
               </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-[#a48443] tracking-widest uppercase group-hover:text-[#8b6f39] transition-colors">
-                  Enter Section
-                </span>
-                <ChevronRight className="w-3 h-3 text-[#a48443] group-hover:text-[#8b6f39] transition-colors" />
-              </div>
-            </Card>
+              <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-slate-700 transition-colors" />
+            </div>
+            <h2 className="mt-5 text-2xl font-black text-[#052e36]">{module.title}</h2>
+            <p className="mt-1 text-sm text-slate-500">{module.subtitle}</p>
+            <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-black text-slate-500">{module.kpiLabel}</p>
+              <p className="mt-1 text-xl font-black text-slate-900">{module.kpiValue}</p>
+            </div>
           </Link>
         ))}
       </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_16px_42px_-34px_rgba(15,23,42,0.75)]">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Net Profit</p>
+          <p className="mt-2 text-2xl font-black text-emerald-600">{formatCurrency(data.kpis.netProfit)}</p>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_16px_42px_-34px_rgba(15,23,42,0.75)]">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Current Period</p>
+          <p className="mt-2 text-2xl font-black text-slate-900">{monthLabel(selectedPeriod)}</p>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_16px_42px_-34px_rgba(15,23,42,0.75)]">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Executive Mode</p>
+          <p className="mt-2 text-2xl font-black text-[#2563eb]">Design-Led Refactor</p>
+        </div>
+      </div>
+
     </div>
   );
 }

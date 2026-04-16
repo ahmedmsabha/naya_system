@@ -8,15 +8,29 @@ import {
   periodKeyFromDateIso,
   syncWarehouseExpenseForPeriod,
 } from "@/lib/finance/transaction-sync";
+import {
+  addIngredientSchema,
+  deleteArchivedInvoiceSchema,
+  deleteInventoryItemSchema,
+  distributionSchema,
+  resetDistributionsSchema,
+  safeParseWarehouseForm,
+  setQuantitySchema,
+  updateQuantitySchema,
+  upsertWeeklyInvoiceSchema,
+} from "./schemas";
 
 // ─── Inventory Items ────────────────────────────────────────────────────────
 
 export async function addIngredient(formData: FormData) {
+  const parsed = safeParseWarehouseForm(addIngredientSchema, formData);
+  if (!parsed.success) return { error: "Invalid ingredient payload." };
+
   const supabase = await createClient();
-  const branchId = formData.get("branch_id") as string;
-  const name = formData.get("name") as string;
-  const unit = (formData.get("unit") as string) || "UNIT";
-  const costPerUnit = parseFloat((formData.get("cost_per_unit") as string) || "0");
+  const branchId = parsed.data.branch_id;
+  const name = parsed.data.name;
+  const unit = parsed.data.unit || "UNIT";
+  const costPerUnit = parsed.data.cost_per_unit;
 
   if (!name.trim()) return { error: "Item name is required" };
 
@@ -46,10 +60,13 @@ export async function addIngredient(formData: FormData) {
 }
 
 export async function updateQuantity(formData: FormData) {
+  const parsed = safeParseWarehouseForm(updateQuantitySchema, formData);
+  if (!parsed.success) return { error: "Invalid quantity payload." };
+
   const supabase = await createClient();
-  const inventoryId = formData.get("inventory_id") as string;
-  const branchId = formData.get("branch_id") as string;
-  const delta = parseInt(formData.get("delta") as string, 10);
+  const inventoryId = parsed.data.inventory_id;
+  const branchId = parsed.data.branch_id;
+  const delta = parsed.data.delta;
 
   // Fetch current quantity
   const { data: inv, error: fetchError } = await supabase
@@ -96,10 +113,13 @@ export async function updateQuantity(formData: FormData) {
 }
 
 export async function setQuantity(formData: FormData) {
+  const parsed = safeParseWarehouseForm(setQuantitySchema, formData);
+  if (!parsed.success) return { error: "Invalid quantity payload." };
+
   const supabase = await createClient();
-  const inventoryId = formData.get("inventory_id") as string;
-  const branchId = formData.get("branch_id") as string;
-  const quantity = Math.max(0, parseFloat(formData.get("quantity") as string) || 0);
+  const inventoryId = parsed.data.inventory_id;
+  const branchId = parsed.data.branch_id;
+  const quantity = parsed.data.quantity;
 
   // Fetch current to compute delta (so we can log purchases by day)
   const { data: inv, error: fetchError } = await supabase
@@ -145,9 +165,12 @@ export async function setQuantity(formData: FormData) {
 }
 
 export async function deleteInventoryItem(formData: FormData) {
+  const parsed = safeParseWarehouseForm(deleteInventoryItemSchema, formData);
+  if (!parsed.success) return { error: "Invalid delete payload." };
+
   const supabase = await createClient();
-  const inventoryId = formData.get("inventory_id") as string;
-  const branchId = formData.get("branch_id") as string;
+  const inventoryId = parsed.data.inventory_id;
+  const branchId = parsed.data.branch_id;
 
   const { error } = await supabase.from("inventory").delete().eq("id", inventoryId).eq("branch_id", branchId);
   if (error) return { error: error.message };
@@ -161,11 +184,14 @@ export async function deleteInventoryItem(formData: FormData) {
 // ─── Weekly Schedule ────────────────────────────────────────────────────────
 
 export async function upsertDistribution(formData: FormData) {
+  const parsed = safeParseWarehouseForm(distributionSchema, formData);
+  if (!parsed.success) return { error: "Invalid distribution payload." };
+
   const supabase = await createClient();
-  const branchId = formData.get("branch_id") as string;
-  const ingredientId = formData.get("ingredient_id") as string;
-  const date = formData.get("date") as string;
-  const quantity = parseFloat(formData.get("quantity") as string) || 0;
+  const branchId = parsed.data.branch_id;
+  const ingredientId = parsed.data.ingredient_id;
+  const date = parsed.data.date;
+  const quantity = parsed.data.quantity;
 
   const { error } = await supabase.from("warehouse_distributions").upsert(
     { branch_id: branchId, ingredient_id: ingredientId, distributed_at: date, quantity },
@@ -180,13 +206,14 @@ export async function upsertDistribution(formData: FormData) {
 
 /** Set purchase quantity for a specific calendar day (does not change on-hand inventory). */
 export async function setDistributionQuantity(formData: FormData) {
-  const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  const ingredientId = String(formData.get("ingredient_id") ?? "");
-  const date = String(formData.get("date") ?? "");
-  const quantity = Math.max(0, parseFloat(String(formData.get("quantity") ?? "0")) || 0);
+  const parsed = safeParseWarehouseForm(distributionSchema, formData);
+  if (!parsed.success) return { error: "Invalid distribution payload." };
 
-  if (!branchId || !ingredientId || !date) return { error: "Missing branch, ingredient, or date" };
+  const supabase = await createClient();
+  const branchId = parsed.data.branch_id;
+  const ingredientId = parsed.data.ingredient_id;
+  const date = parsed.data.date;
+  const quantity = parsed.data.quantity;
 
   const { error } = await supabase.from("warehouse_distributions").upsert(
     { branch_id: branchId, ingredient_id: ingredientId, distributed_at: date, quantity },
@@ -200,10 +227,13 @@ export async function setDistributionQuantity(formData: FormData) {
 }
 
 export async function resetDistributions(formData: FormData) {
+  const parsed = safeParseWarehouseForm(resetDistributionsSchema, formData);
+  if (!parsed.success) return { error: "Invalid reset payload." };
+
   const supabase = await createClient();
-  const branchId = formData.get("branch_id") as string;
-  const weekStart = formData.get("week_start") as string;
-  const weekEnd = formData.get("week_end") as string;
+  const branchId = parsed.data.branch_id;
+  const weekStart = parsed.data.week_start;
+  const weekEnd = parsed.data.week_end;
 
   const { error } = await supabase
     .from("warehouse_distributions")
@@ -315,9 +345,12 @@ async function buildWeeklyInvoiceSnapshot(
 }
 
 export async function deleteArchivedInvoice(formData: FormData) {
+  const parsed = safeParseWarehouseForm(deleteArchivedInvoiceSchema, formData);
+  if (!parsed.success) return { error: "Invalid archive delete payload." };
+
   const supabase = await createClient();
-  const invoiceId = formData.get("invoice_id") as string;
-  const branchId = formData.get("branch_id") as string;
+  const invoiceId = parsed.data.invoice_id;
+  const branchId = parsed.data.branch_id;
 
   const { data: deletedInvoice, error } = await supabase
     .from("warehouse_invoices")
@@ -352,14 +385,17 @@ export async function deleteArchivedInvoice(formData: FormData) {
  */
 export async function upsertWeeklyInvoice(formData: FormData) {
   const supabase = await createClient();
-  const branchId = String(formData.get("branch_id") ?? "");
-  const requestedStatusRaw = String(formData.get("status") ?? "");
+  const parsed = safeParseWarehouseForm(upsertWeeklyInvoiceSchema, formData);
+  if (!parsed.success) return { error: "Invalid invoice payload." };
+
+  const branchId = parsed.data.branch_id;
+  const requestedStatusRaw = parsed.data.status ?? "";
   const requestedStatus = requestedStatusRaw || "pending";
-  const forceArchived = String(formData.get("force_archived") ?? "") === "true";
+  const forceArchived = parsed.data.force_archived === "true";
   const anchorDateRaw =
-    String(formData.get("anchor_date") ?? "") ||
-    String(formData.get("purchase_date") ?? "") ||
-    String(formData.get("date") ?? "");
+    String(parsed.data.anchor_date ?? "") ||
+    String(parsed.data.purchase_date ?? "") ||
+    String(parsed.data.date ?? "");
   const anchorDateIso = parseWarehouseIsoDate(anchorDateRaw);
 
   if (!branchId) return { error: "Missing branch_id" };
@@ -515,8 +551,12 @@ export async function upsertWeeklyInvoice(formData: FormData) {
  * Ensures invoice exists for the week, recalculates current totals/items, then marks status archived.
  */
 export async function archiveWeeklyInvoice(formData: FormData) {
-  const branchId = String(formData.get("branch_id") ?? "");
-  if (!branchId) return { error: "Missing branch_id" };
+  const parsed = safeParseWarehouseForm(
+    upsertWeeklyInvoiceSchema.pick({ branch_id: true, anchor_date: true, purchase_date: true, date: true }),
+    formData,
+  );
+  if (!parsed.success) return { error: "Invalid archive payload." };
+  const branchId = parsed.data.branch_id;
 
   const fd = new FormData();
   fd.set("branch_id", branchId);
@@ -524,9 +564,9 @@ export async function archiveWeeklyInvoice(formData: FormData) {
   fd.set("force_archived", "true");
 
   const anchorDateRaw =
-    String(formData.get("anchor_date") ?? "") ||
-    String(formData.get("purchase_date") ?? "") ||
-    String(formData.get("date") ?? "");
+    String(parsed.data.anchor_date ?? "") ||
+    String(parsed.data.purchase_date ?? "") ||
+    String(parsed.data.date ?? "");
   if (anchorDateRaw) {
     fd.set("anchor_date", anchorDateRaw);
   }
@@ -535,8 +575,12 @@ export async function archiveWeeklyInvoice(formData: FormData) {
 }
 
 export async function archiveInvoice(formData: FormData) {
-  const branchId = String(formData.get("branch_id") ?? "");
-  if (!branchId) return { error: "Missing branch_id" };
+  const parsed = safeParseWarehouseForm(
+    upsertWeeklyInvoiceSchema.pick({ branch_id: true }),
+    formData,
+  );
+  if (!parsed.success) return { error: "Invalid archive payload." };
+  const branchId = parsed.data.branch_id;
 
   const result = await archiveWeeklyInvoice(formData);
   if (result?.error) return result;

@@ -12,6 +12,14 @@ import {
   periodKeyFromDateIso,
   syncVendorExpensesForPeriod,
 } from '@/lib/finance/transaction-sync';
+import { addMonths, monthEndIso, monthStartIso } from '@/lib/domain/date';
+import {
+  addVendorInvoiceSchema,
+  attachVendorReceiptSchema,
+  deleteVendorInvoiceSchema,
+  uploadVendorReceiptSchema,
+  vendorSmartAnalysisSchema,
+} from './schemas';
 
 type ActionResult<T = undefined> = {
   success: boolean;
@@ -69,37 +77,8 @@ type VendorSmartAnalysisData = {
   vendorBreakdown: VendorBreakdownItem[];
 };
 
-function isIsoDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
 function cleanFileName(fileName: string): string {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
-function isPeriodKey(value: string): boolean {
-  return /^\d{4}-\d{2}$/.test(value);
-}
-
-function monthKeyFromDate(input: Date): string {
-  return `${input.getFullYear()}-${String(input.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function addMonths(period: string, delta: number): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + delta);
-  return monthKeyFromDate(d);
-}
-
-function monthStartIso(period: string): string {
-  return `${period}-01`;
-}
-
-function monthEndIso(period: string): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + 1);
-  d.setDate(0);
-  return `${period}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function monthSequence(period: string, months: number): string[] {
@@ -169,23 +148,18 @@ async function uploadVendorReceipt(
 export async function uploadVendorInvoiceReceiptAction(
   input: UploadVendorReceiptInput,
 ): Promise<ActionResult<{ receiptUrl: string }>> {
-  if (!input.branchId) return { success: false, error: 'Missing branch id.' };
-  if (!isVendorPayableCategory(input.vendorName)) {
-    return { success: false, error: 'Invalid vendor category.' };
-  }
-  if (!isIsoDate(input.invoiceDate)) {
-    return { success: false, error: 'Invoice date must be in YYYY-MM-DD format.' };
-  }
-  if (!input.file) return { success: false, error: 'Receipt file is required.' };
-
-  return uploadVendorReceipt(input);
+  const parsed = uploadVendorReceiptSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'Invalid receipt payload.' };
+  return uploadVendorReceipt(parsed.data);
 }
 
 export async function attachVendorInvoiceReceiptAction(
   input: AttachVendorReceiptInput,
 ): Promise<ActionResult<{ receiptUrl: string }>> {
-  if (!input.invoiceId) return { success: false, error: 'Missing invoice id.' };
-  const uploaded = await uploadVendorInvoiceReceiptAction(input);
+  const parsed = attachVendorReceiptSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'Invalid attach receipt payload.' };
+
+  const uploaded = await uploadVendorInvoiceReceiptAction(parsed.data);
   if (!uploaded.success) return uploaded;
 
   const receiptUrl = uploaded.data?.receiptUrl ?? null;
@@ -195,39 +169,31 @@ export async function attachVendorInvoiceReceiptAction(
   const { error } = await supabase
     .from('vendor_invoices')
     .update({ receipt_url: receiptUrl })
-    .eq('id', input.invoiceId)
-    .eq('branch_id', input.branchId);
+    .eq('id', parsed.data.invoiceId)
+    .eq('branch_id', parsed.data.branchId);
 
   if (error) return { success: false, error: error.message };
 
-  revalidatePath(`/branch/${input.branchId}/vendors`);
-  revalidatePath(`/branch/${input.branchId}/financials`);
+  revalidatePath(`/branch/${parsed.data.branchId}/vendors`);
+  revalidatePath(`/branch/${parsed.data.branchId}/financials`);
   return { success: true, data: { receiptUrl } };
 }
 
 export async function addVendorInvoiceAction(
   input: AddVendorInvoiceInput,
 ): Promise<ActionResult<{ id: string; receiptUrl: string | null }>> {
-  if (!input.branchId) return { success: false, error: 'Missing branch id.' };
-  if (!isVendorPayableCategory(input.vendorName)) {
-    return { success: false, error: 'Invalid vendor category.' };
-  }
-  if (!isIsoDate(input.invoiceDate)) {
-    return { success: false, error: 'Invoice date must be in YYYY-MM-DD format.' };
-  }
+  const parsed = addVendorInvoiceSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'Invalid vendor invoice payload.' };
 
-  const amount = Number(input.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { success: false, error: 'Amount must be greater than zero.' };
-  }
+  const amount = Number(parsed.data.amount);
 
   let receiptUrl: string | null = null;
-  if (input.receiptFile) {
+  if (parsed.data.receiptFile) {
     const uploadResult = await uploadVendorReceipt({
-      branchId: input.branchId,
-      vendorName: input.vendorName,
-      invoiceDate: input.invoiceDate,
-      file: input.receiptFile,
+      branchId: parsed.data.branchId,
+      vendorName: parsed.data.vendorName,
+      invoiceDate: parsed.data.invoiceDate,
+      file: parsed.data.receiptFile,
     });
     if (!uploadResult.success) {
       return { success: false, error: uploadResult.error ?? 'Receipt upload failed.' };
@@ -239,9 +205,9 @@ export async function addVendorInvoiceAction(
   const { data, error } = await supabase
     .from('vendor_invoices')
     .insert({
-      branch_id: input.branchId,
-      vendor_name: input.vendorName,
-      invoice_date: input.invoiceDate,
+      branch_id: parsed.data.branchId,
+      vendor_name: parsed.data.vendorName,
+      invoice_date: parsed.data.invoiceDate,
       amount: Number(amount.toFixed(2)),
       receipt_url: receiptUrl,
     })
@@ -252,12 +218,12 @@ export async function addVendorInvoiceAction(
 
   await syncVendorExpensesForPeriod(
     supabase,
-    input.branchId,
-    periodKeyFromDateIso(input.invoiceDate),
+    parsed.data.branchId,
+    periodKeyFromDateIso(parsed.data.invoiceDate),
   );
 
-  revalidatePath(`/branch/${input.branchId}/vendors`);
-  revalidatePath(`/branch/${input.branchId}/financials`);
+  revalidatePath(`/branch/${parsed.data.branchId}/vendors`);
+  revalidatePath(`/branch/${parsed.data.branchId}/financials`);
   return {
     success: true,
     data: {
@@ -270,16 +236,16 @@ export async function addVendorInvoiceAction(
 export async function deleteVendorInvoiceAction(
   input: DeleteVendorInvoiceInput,
 ): Promise<ActionResult> {
-  if (!input.branchId) return { success: false, error: 'Missing branch id.' };
-  if (!input.invoiceId) return { success: false, error: 'Missing invoice id.' };
+  const parsed = deleteVendorInvoiceSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'Invalid delete invoice payload.' };
 
   const supabase = await createClient();
   const { data: deletedInvoice, error } = await supabase
     .from('vendor_invoices')
     .delete()
     .select('invoice_date')
-    .eq('id', input.invoiceId)
-    .eq('branch_id', input.branchId)
+    .eq('id', parsed.data.invoiceId)
+    .eq('branch_id', parsed.data.branchId)
     .single();
 
   if (error) return { success: false, error: error.message };
@@ -287,34 +253,34 @@ export async function deleteVendorInvoiceAction(
   if (deletedInvoice?.invoice_date) {
     await syncVendorExpensesForPeriod(
       supabase,
-      input.branchId,
+      parsed.data.branchId,
       periodKeyFromDateIso(String(deletedInvoice.invoice_date)),
     );
   }
 
-  revalidatePath(`/branch/${input.branchId}/vendors`);
-  revalidatePath(`/branch/${input.branchId}/financials`);
+  revalidatePath(`/branch/${parsed.data.branchId}/vendors`);
+  revalidatePath(`/branch/${parsed.data.branchId}/financials`);
   return { success: true };
 }
 
 export async function getVendorSmartAnalysisAction(
   input: VendorSmartAnalysisInput,
 ): Promise<ActionResult<VendorSmartAnalysisData>> {
-  if (!input.branchId) return { success: false, error: 'Missing branch id.' };
-  if (!isPeriodKey(input.period)) return { success: false, error: 'Period must be in YYYY-MM format.' };
+  const parsed = vendorSmartAnalysisSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'Invalid smart analysis payload.' };
 
-  const periods = monthSequence(input.period, 6);
+  const periods = monthSequence(parsed.data.period, 6);
   const startDate = monthStartIso(periods[0]);
-  const endDate = monthEndIso(input.period);
-  const previousPeriod = addMonths(input.period, -1);
+  const endDate = monthEndIso(parsed.data.period);
+  const previousPeriod = addMonths(parsed.data.period, -1);
 
   const supabase = await createClient();
   const [{ data: branch }, { data: invoiceRows, error }] = await Promise.all([
-    supabase.from('branches').select('name').eq('id', input.branchId).single(),
+    supabase.from('branches').select('name').eq('id', parsed.data.branchId).single(),
     supabase
       .from('vendor_invoices')
       .select('vendor_name, amount, invoice_date')
-      .eq('branch_id', input.branchId)
+      .eq('branch_id', parsed.data.branchId)
       .gte('invoice_date', startDate)
       .lte('invoice_date', endDate),
   ]);
@@ -353,7 +319,7 @@ export async function getVendorSmartAnalysisAction(
 
   const vendorBreakdown: VendorBreakdownItem[] = VENDOR_PAYABLE_CATEGORIES.map((vendor) => {
     const periodMap = byVendorPeriod.get(vendor);
-    const currentTotal = Number((periodMap?.get(input.period) ?? 0).toFixed(2));
+    const currentTotal = Number((periodMap?.get(parsed.data.period) ?? 0).toFixed(2));
     const previousTotal = Number((periodMap?.get(previousPeriod) ?? 0).toFixed(2));
     return {
       vendorName: vendor,
@@ -385,7 +351,7 @@ export async function getVendorSmartAnalysisAction(
   const forecastLiability = Number(linearForecast(monthlyTotals).toFixed(2));
 
   const insights = await generateVendorSmartCommentary({
-    period: input.period,
+    period: parsed.data.period,
     branchName: String(branch?.name ?? ''),
     context: {
       highestVolatilityVendor,
@@ -413,7 +379,7 @@ export async function getVendorSmartAnalysisAction(
       volatilityScore: Number(Math.max(0, highestVolatilityScore).toFixed(3)),
       forecastLiability,
       totalCurrentMonthSpend: Number(totalCurrentMonthSpend.toFixed(2)),
-      period: input.period,
+      period: parsed.data.period,
       vendorBreakdown: normalizedBreakdown,
     },
   };

@@ -68,7 +68,6 @@ export default async function LoginPage({
                     type="email"
                     name="email"
                     placeholder="name@company.com"
-                    defaultValue="admin@naya.com" /* Default for testing */
                     className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#052e36] transition-all text-sm"
                   />
                 </div>
@@ -86,7 +85,6 @@ export default async function LoginPage({
                     type="password"
                     name="password"
                     placeholder="••••••••"
-                    defaultValue="password123" /* Default for testing */
                     className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#052e36] transition-all text-sm"
                   />
                 </div>

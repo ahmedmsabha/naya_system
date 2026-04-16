@@ -4,32 +4,13 @@ import {
   type MonthlyPnLExpenseCategory,
   type VendorPayableCategory,
 } from '@/lib/finance/monthly-pnl';
+import { monthEndIso, monthStartIso, nextMonthStartIso, periodFromDateIso } from '@/lib/domain/date';
+import { toMoney } from '@/lib/domain/money';
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
-function monthStartIso(period: string): string {
-  return `${period}-01`;
-}
-
-function monthEndIso(period: string): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + 1);
-  d.setDate(0);
-  return `${period}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function nextMonthStartIso(period: string): string {
-  const d = new Date(`${period}-01T12:00:00`);
-  d.setMonth(d.getMonth() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-}
-
-function toPeriodKeyFromIsoDate(dateIso: string): string {
-  return dateIso.slice(0, 7);
-}
-
 function fixed2(value: number): number {
-  return Number((Number.isFinite(value) ? value : 0).toFixed(2));
+  return toMoney(value);
 }
 
 async function upsertCategoryRows(
@@ -51,7 +32,7 @@ async function upsertCategoryRows(
 }
 
 export function periodKeyFromDateIso(dateIso: string): string {
-  return toPeriodKeyFromIsoDate(dateIso);
+  return periodFromDateIso(dateIso);
 }
 
 export async function syncVendorExpensesForPeriod(
