@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyBlueHeaderTemplate } from '@/lib/finance/pdf-template';
 
 type InvestorMetricRow = {
   label: string;
@@ -41,21 +42,21 @@ export function exportInvestorReportPDF(input: InvestorReportInput): void {
     minute: '2-digit',
   });
 
-  doc.setFontSize(19);
-  doc.text('Investor Intelligence Brief', 40, 52);
-
-  doc.setFontSize(10);
-  doc.setTextColor(71, 85, 105);
-  doc.text(`Branch: ${input.branchName}`, 40, 74);
-  doc.text(`Period: ${input.monthLabel}`, 40, 90);
-  doc.text(`Generated: ${generatedLabel}`, 40, 106);
+  const contentStartY = applyBlueHeaderTemplate(doc, {
+    title: 'Investor Intelligence Brief',
+    subtitle: `${input.branchName} - ${input.monthLabel}`,
+    rightMeta: [
+      `Generated: ${generatedLabel}`,
+      `Projected Valuation: ${formatCurrency(input.projectedValuation)}`,
+    ],
+  });
 
   doc.setFontSize(12);
   doc.setTextColor(15, 23, 42);
-  doc.text('Core Investor Signals', 40, 138);
+  doc.text('Core Investor Signals', 40, contentStartY);
 
   autoTable(doc, {
-    startY: 150,
+    startY: contentStartY + 12,
     head: [['Metric', 'Value']],
     body: [
       ['Projected Valuation', formatCurrency(input.projectedValuation)],

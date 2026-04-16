@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Settings, X } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import { LogOut, Menu, Settings, X } from "lucide-react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { navigation } from "@/components/layout/Sidebar";
+import { LogoutConfirmButton } from "@/components/layout/LogoutConfirmButton";
 
 export function TopHeader() {
   const pathname = usePathname();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [menuPathname, setMenuPathname] = useState<string | null>(null);
+  const isMobileMenuOpen = menuPathname === pathname;
 
   // Simple logic to derive the breadcrumb text from the path, for the first demo
   let breadcrumb = "Dashboard";
@@ -28,29 +30,13 @@ export function TopHeader() {
     }
   }
 
-  // Close mobile menu on route change without using setState in an effect.
-  // useSyncExternalStore is used here only as a stable subscription; the
-  // real dependency is pathname which triggers a re-render.
-  useSyncExternalStore(
-    () => () => {},
-    () => pathname,
-  );
-  // When pathname changes between renders the component re-renders and the
-  // state initialiser below resets the menu. We keep the menu in a ref-like
-  // derived state: if the pathname changed we reset it.
-  const [prevPathname, setPrevPathname] = useState(pathname);
-  if (pathname !== prevPathname) {
-    setIsMobileMenuOpen(false);
-    setPrevPathname(pathname);
-  }
-
   return (
     <>
       <header className="h-16 w-full flex items-center justify-between px-3 sm:px-4 md:px-6 bg-white border-b border-gray-100 shrink-0">
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0">
           <button
             type="button"
-            onClick={() => setIsMobileMenuOpen(true)}
+            onClick={() => setMenuPathname(pathname)}
             className="p-2 -ml-1 text-gray-600 hover:text-gray-900 rounded-md md:hidden"
             aria-label="Open navigation menu"
           >
@@ -84,7 +70,7 @@ export function TopHeader() {
         <button
           type="button"
           className="absolute inset-0 bg-black/40"
-          onClick={() => setIsMobileMenuOpen(false)}
+          onClick={() => setMenuPathname(null)}
           aria-label="Close navigation menu"
         />
         <aside
@@ -99,7 +85,7 @@ export function TopHeader() {
             <button
               type="button"
               className="p-2 rounded-md text-gray-300 hover:text-white hover:bg-white/10"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => setMenuPathname(null)}
               aria-label="Close navigation menu"
             >
               <X className="w-5 h-5" />
@@ -113,6 +99,7 @@ export function TopHeader() {
                 <Link
                   key={item.name}
                   href={item.href}
+                  onClick={() => setMenuPathname(null)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                     isActive
                       ? "bg-[#d2ae6d] text-[#052e36]"
@@ -124,6 +111,12 @@ export function TopHeader() {
                 </Link>
               );
             })}
+            <div className="pt-3 mt-3 border-t border-white/10">
+              <LogoutConfirmButton
+                triggerClassName="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                icon={<LogOut className="w-5 h-5 shrink-0" />}
+              />
+            </div>
           </nav>
         </aside>
       </div>

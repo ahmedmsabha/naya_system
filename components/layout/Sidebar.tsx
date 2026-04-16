@@ -11,6 +11,7 @@ import {
   LogOut,
   Wallet,
 } from "lucide-react";
+import { LogoutConfirmButton } from "@/components/layout/LogoutConfirmButton";
 
 const navigation = [
   { name: "Management", href: "/", icon: LayoutDashboard },
@@ -55,10 +56,10 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 px-8 mt-auto">
-        <button className="flex items-center gap-3 text-sm font-medium text-gray-300 hover:text-white transition-colors">
-          <LogOut className="w-5 h-5" />
-          Log Out
-        </button>
+        <LogoutConfirmButton
+          triggerClassName="flex items-center gap-3 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+          icon={<LogOut className="w-5 h-5" />}
+        />
       </div>
     </div>
   );

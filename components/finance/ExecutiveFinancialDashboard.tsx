@@ -15,12 +15,11 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import { exportInvestorReportPDF } from '@/lib/finance/InvestorReportPDF';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
 type KpiCard = {
   label: string;
@@ -48,6 +47,10 @@ type ExecutiveFinancialDashboardProps = {
   insights: string[];
   pnlEntryTable: ReactNode;
 };
+
+const profitTrendConfig = {
+  netProfit: { label: 'Net Profit', color: '#06b6d4' },
+} satisfies ChartConfig;
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -391,26 +394,29 @@ export function ExecutiveFinancialDashboard({
         <article className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-xl font-bold text-[#052e36]">Profit & Loss Trend</h3>
           <div className="mt-6 h-64 rounded-2xl border border-cyan-100 bg-slate-50 p-3">
-            <ResponsiveContainer width="100%" height="100%">
+            <ChartContainer config={profitTrendConfig} className="h-full w-full">
               <AreaChart data={trendPoints} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
                 <XAxis dataKey="label" tick={{ fill: '#475569', fontSize: 11 }} />
                 <YAxis tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} tick={{ fill: '#475569', fontSize: 11 }} />
-                <Tooltip
-                  formatter={(value) => formatCurrency(Number(value ?? 0))}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #cbd5e1' }}
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => formatCurrency(value)}
+                    />
+                  }
                 />
                 <Area
                   type="monotone"
                   dataKey="netProfit"
-                  stroke="#06b6d4"
+                  stroke="var(--color-netProfit)"
                   strokeWidth={2.5}
                   fill="#67e8f9"
                   fillOpacity={0.35}
                   isAnimationActive={false}
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </div>
         </article>
       </section>

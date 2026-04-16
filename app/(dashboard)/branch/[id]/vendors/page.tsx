@@ -47,12 +47,15 @@ export default async function BranchVendorsPage({
 
   const selectedStart = monthStartIso(selectedPeriod);
   const selectedEnd = monthEndIso(selectedPeriod);
+  const previousPeriod = addMonths(selectedPeriod, -1);
+  const previousStart = monthStartIso(previousPeriod);
+  const previousEnd = monthEndIso(previousPeriod);
   const trendPeriods = monthSequence(selectedPeriod, 6);
   const trendStart = monthStartIso(trendPeriods[0]);
   const trendEnd = monthEndIso(selectedPeriod);
 
   const supabase = await createClient();
-  const [{ data: branch }, { data: invoiceRows }] = await Promise.all([
+  const [{ data: branch }, { data: invoiceRows }, { data: previousInvoiceRows }] = await Promise.all([
     supabase.from('branches').select('name').eq('id', id).single(),
     supabase
       .from('vendor_invoices')
@@ -62,6 +65,12 @@ export default async function BranchVendorsPage({
       .lte('invoice_date', trendEnd)
       .order('invoice_date', { ascending: false })
       .order('created_at', { ascending: false }),
+    supabase
+      .from('vendor_invoices')
+      .select('amount')
+      .eq('branch_id', id)
+      .gte('invoice_date', previousStart)
+      .lte('invoice_date', previousEnd),
   ]);
 
   if (!branch) notFound();
@@ -91,6 +100,18 @@ export default async function BranchVendorsPage({
   for (const invoice of initialInvoices) {
     monthlyTotals[invoice.vendorName] += invoice.amount;
   }
+  const currentMonthSpend = initialInvoices.reduce((sum, row) => sum + row.amount, 0);
+  const previousMonthSpend = (previousInvoiceRows ?? []).reduce(
+    (sum, row) => sum + (Number(row.amount ?? 0) || 0),
+    0,
+  );
+  const costInflationPct =
+    previousMonthSpend > 0
+      ? Number((((currentMonthSpend - previousMonthSpend) / previousMonthSpend) * 100).toFixed(2))
+      : currentMonthSpend > 0
+        ? 100
+        : 0;
+  const outstandingPayables = currentMonthSpend;
 
   const vendorTrendSeries = Object.fromEntries(
     VENDOR_PAYABLE_CATEGORIES.map((vendor) => [
@@ -160,6 +181,8 @@ export default async function BranchVendorsPage({
         branchName={String(branch.name ?? '')}
         selectedPeriod={selectedPeriod}
         monthLabel={currentMonthLabel}
+        outstandingPayables={Number(outstandingPayables.toFixed(2))}
+        costInflationPct={costInflationPct}
         initialInvoices={initialInvoices}
         initialMonthlyTotals={monthlyTotals}
         trendSeriesByVendor={vendorTrendSeries}

@@ -2,6 +2,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyBlueHeaderTemplate } from '@/lib/finance/pdf-template';
 
 export type PayrollStatementPdfRow = {
   employee: string;
@@ -36,19 +37,15 @@ export function generatePayrollStatementPdf(
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  doc.setFillColor(30, 58, 138);
-  doc.rect(40, 28, pageWidth - 80, 8, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.text(`Naya Foods - ${input.branchName}`, 40, 64);
-
-  doc.setFontSize(15);
-  doc.text('Salary Payment Statement', 40, 88);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  doc.text(input.periodLabel, 40, 108);
+  const contentStartY = applyBlueHeaderTemplate(doc, {
+    title: 'Salary Payment Statement',
+    subtitle: `${input.branchName} - ${input.periodLabel}`,
+    rightMeta: [
+      `Total Payroll: ${money(input.totalPayroll)}`,
+      `Paid: ${money(input.paidSoFar)}`,
+      `Remaining: ${money(input.remaining)}`,
+    ],
+  });
 
   const body = input.rows.map((row) => [
     row.employee,
@@ -59,7 +56,7 @@ export function generatePayrollStatementPdf(
 
   autoTable(doc, {
     theme: 'grid',
-    startY: 124,
+    startY: contentStartY,
     head: [['Employee', 'Base Salary', 'Paid Amount', 'Status']],
     body,
     styles: {

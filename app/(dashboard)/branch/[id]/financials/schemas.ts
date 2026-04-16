@@ -37,6 +37,23 @@ export const upsertDeductionsSchema = z.object({
   values: deductionCategoryRecord,
 });
 
+export const quickRevenueEntrySchema = z.object({
+  branch_id: uuid,
+  period: period,
+  sale_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  recipe_id: uuid,
+  quantity: z.coerce.number().int().positive(),
+  unit_price: z.coerce.number().positive(),
+  channel: z.enum(["delivery", "dine_in", "takeaway", "manual"]).default("manual"),
+});
+
+export const quickExpenseEntrySchema = z.object({
+  branch_id: uuid,
+  period: period,
+  category: z.enum(MONTHLY_PNL_ALL_CATEGORIES),
+  amount: nonNegativeNumber.positive(),
+});
+
 function formDataToRecord(formData: FormData): Record<string, string> {
   const entries: Array<[string, string]> = [];
   for (const [key, value] of formData.entries()) {

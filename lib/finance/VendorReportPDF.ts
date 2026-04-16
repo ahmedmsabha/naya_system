@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyBlueHeaderTemplate } from '@/lib/finance/pdf-template';
 
 type SmartStatus = 'Under Budget' | 'Trend Rising' | 'Critical Increase';
 
@@ -43,26 +44,25 @@ export function exportVendorReportPDF(input: VendorReportInput): void {
     minute: '2-digit',
   });
 
-  doc.setFontSize(19);
-  doc.text('Executive Vendor Spend Report', 40, 52);
-
-  doc.setFontSize(10);
-  doc.setTextColor(71, 85, 105);
-  doc.text(`Branch: ${input.branchName}`, 40, 74);
-  doc.text(`Period: ${input.monthLabel}`, 40, 90);
-  doc.text(`Generated: ${timestamp}`, 40, 106);
-  doc.text(`Total Spend: ${formatCurrency(input.totalSpend)}`, 40, 122);
+  const contentStartY = applyBlueHeaderTemplate(doc, {
+    title: 'Executive Vendor Spend Report',
+    subtitle: `${input.branchName} - ${input.monthLabel}`,
+    rightMeta: [
+      `Generated: ${timestamp}`,
+      `Total Spend: ${formatCurrency(input.totalSpend)}`,
+    ],
+  });
 
   doc.setFontSize(12);
   doc.setTextColor(15, 23, 42);
-  doc.text('Executive Summary (AI Insights)', 40, 150);
+  doc.text('Executive Summary (AI Insights)', 40, contentStartY);
 
   const insights =
     input.insights.length > 0
       ? input.insights
       : ['No AI insights available for this period. Add invoice activity and regenerate the smart report.'];
 
-  let y = 170;
+  let y = contentStartY + 20;
   doc.setFontSize(10.5);
   doc.setTextColor(30, 41, 59);
   for (const insight of insights.slice(0, 3)) {

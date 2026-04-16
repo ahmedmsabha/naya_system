@@ -3,7 +3,6 @@ import { VENDOR_PAYABLE_CATEGORIES } from "@/lib/finance/monthly-pnl";
 
 const uuid = z.string().uuid();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const period = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 const nonNegativeNumber = z.coerce.number().min(0);
 
 export const uploadVendorReceiptSchema = z.object({
@@ -31,6 +30,7 @@ export const deleteVendorInvoiceSchema = z.object({
 });
 
 export const vendorSmartAnalysisSchema = z.object({
-  branchId: uuid,
-  period,
+  // Some legacy branch routes may still use non-UUID identifiers.
+  branchId: z.string().trim().min(1),
+  period: z.string().trim().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
 });

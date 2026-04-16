@@ -6,7 +6,7 @@ import { loginAction } from "./actions";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; logged_out?: string; reset?: string }>;
 }) {
   const params = await searchParams;
   return (
@@ -54,6 +54,16 @@ export default async function LoginPage({
             </div>
 
             <div className="space-y-4 pt-2">
+              {params?.logged_out === "1" && (
+                <div className="bg-emerald-50 text-emerald-700 text-sm font-semibold p-3 rounded-lg text-center border border-emerald-100">
+                  Signed out successfully. See you soon.
+                </div>
+              )}
+              {params?.reset === "1" && (
+                <div className="bg-sky-50 text-sky-700 text-sm font-semibold p-3 rounded-lg text-center border border-sky-100">
+                  Password updated successfully. Please sign in.
+                </div>
+              )}
               {params?.error && (
                 <div className="bg-red-50 text-red-600 text-sm font-semibold p-3 rounded-lg text-center border border-red-100">
                   {params.error}
@@ -77,7 +87,7 @@ export default async function LoginPage({
                     <label className="text-sm font-semibold text-gray-600 block">
                       Password
                     </label>
-                    <Link href="#" className="text-xs font-semibold text-[#a48443] hover:text-[#8b6f39] transition-colors">
+                    <Link href="/forgot-password" className="text-xs font-semibold text-[#a48443] hover:text-[#8b6f39] transition-colors">
                       Forgot Password?
                     </Link>
                   </div>
@@ -93,6 +103,9 @@ export default async function LoginPage({
                   Secure Sign In
                 </Button>
               </form>
+              <Link href="/phone-login" className="block text-center text-xs font-semibold text-slate-600 hover:text-slate-900">
+                Use Phone Verification Code
+              </Link>
             </div>
 
             <p className="text-xs text-center text-gray-400 font-medium">

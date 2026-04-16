@@ -69,6 +69,7 @@ Rules:
 - Exactly 3 insights.
 - Each insight maximum 22 words.
 - Tone: sharp, board-level, action-oriented.
+- English only.
 - No markdown, no bullets, no extra keys, no commentary.
 - Use concrete figures where available (for example gross sales, net profit, net margin, food cost %, top loss sources, open alerts).
 
@@ -83,7 +84,7 @@ ${contextJson}
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const result = await model.generateContent(prompt);
     const raw = result.response.text();
     const cleaned = cleanModelText(raw);
@@ -150,6 +151,7 @@ Rules:
 - Exactly 3 insights.
 - Each insight maximum 26 words.
 - Tone: concise, business-focused, and action-oriented.
+- English only.
 - No markdown, no bullets, no extra keys, no commentary.
 - Focus areas:
   1) Price volatility (or spend volatility proxy if unit prices are unavailable)
@@ -166,7 +168,7 @@ ${contextJson}
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const result = await model.generateContent(prompt);
     const raw = result.response.text();
     const cleaned = cleanModelText(raw);

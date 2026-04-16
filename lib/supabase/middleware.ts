@@ -33,18 +33,28 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  // IMPORTANT: If you remove getClaims() and you use server-side rendering
-  // with the Supabase client, your users may be randomly logged out.
-  const { data } = await supabase.auth.getClaims()
-  const user = data?.claims
+  const pathname = request.nextUrl.pathname
+  const isAuthPage =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/phone-login') ||
+    pathname.startsWith('/update-password')
+  const isPasswordUpdatePage = pathname.startsWith('/update-password')
 
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login')
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  // getUser is the canonical auth check for protected routes.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user && !isAuthPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  if (user && isAuthPage && !isPasswordUpdatePage) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
     return NextResponse.redirect(url)
   }
 

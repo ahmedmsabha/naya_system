@@ -2,6 +2,7 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { applyBlueHeaderTemplate } from "@/lib/finance/pdf-template";
 
 type WeeklyPdfRow = {
   item: string;
@@ -28,17 +29,14 @@ export function generateWeeklyInvoicePdf(input: WeeklyInvoicePdfInput) {
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  doc.setFillColor(30, 58, 138);
-  doc.rect(40, 28, pageWidth - 80, 8, "F");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text(`Naya Food - ${input.branchName}`, 40, 64);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(12);
-  doc.text(`Orders from ${input.weekStartLabel} to ${input.weekEndLabel}`, 40, 86);
-  doc.text(`Invoice #: ${input.invoiceNumber}`, pageWidth - 40, 86, { align: "right" });
+  const contentStartY = applyBlueHeaderTemplate(doc, {
+    title: "Weekly Warehouse Invoice",
+    subtitle: `${input.branchName} - ${input.weekStartLabel} to ${input.weekEndLabel}`,
+    rightMeta: [
+      `Invoice #: ${input.invoiceNumber}`,
+      `Grand Total: ${money(input.grandTotal)}`,
+    ],
+  });
 
   const body = input.rows.map((row) => [
     row.item,
@@ -56,7 +54,7 @@ export function generateWeeklyInvoicePdf(input: WeeklyInvoicePdfInput) {
 
   autoTable(doc, {
     theme: "grid",
-    startY: 104,
+    startY: contentStartY,
     head: [["Item", "Unit Price", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Total Qty", "Total Price"]],
     body,
     styles: {

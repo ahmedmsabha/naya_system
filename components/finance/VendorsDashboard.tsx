@@ -15,10 +15,11 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { Area, AreaChart, ResponsiveContainer } from 'recharts';
+import { Area, AreaChart } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
 import {
   VENDOR_PAYABLE_CATEGORIES,
   type VendorPayableCategory,
@@ -57,10 +58,18 @@ type VendorsDashboardProps = {
   branchName: string;
   selectedPeriod: string;
   monthLabel: string;
+  outstandingPayables: number;
+  costInflationPct: number;
   initialInvoices: VendorInvoiceRow[];
   initialMonthlyTotals: Record<VendorPayableCategory, number>;
   trendSeriesByVendor: Record<VendorPayableCategory, VendorTrendPoint[]>;
 };
+
+type ReceiptState = 'empty' | 'uploading' | 'ready';
+
+const vendorSparklineConfig = {
+  total: { label: 'Total', color: '#6366f1' },
+} satisfies ChartConfig;
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -116,6 +125,8 @@ export function VendorsDashboard({
   branchName,
   selectedPeriod,
   monthLabel,
+  outstandingPayables,
+  costInflationPct,
   initialInvoices,
   initialMonthlyTotals,
   trendSeriesByVendor,
@@ -137,6 +148,9 @@ export function VendorsDashboard({
   const [smartAnalysisData, setSmartAnalysisData] = useState<VendorSmartAnalysisData | null>(null);
   const [smartAnalysisError, setSmartAnalysisError] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [receiptStateByInvoiceId, setReceiptStateByInvoiceId] = useState<Record<string, ReceiptState>>(
+    Object.fromEntries(initialInvoices.map((invoice) => [invoice.id, invoice.receiptUrl ? 'ready' : 'empty'])),
+  );
   const uploadInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const minDate = periodStart(selectedPeriod);
@@ -293,6 +307,7 @@ export function VendorsDashboard({
     setError(null);
     setMessage(null);
     setUploadingInvoiceId(invoice.id);
+    setReceiptStateByInvoiceId((current) => ({ ...current, [invoice.id]: 'uploading' }));
     startUploadTransition(async () => {
       const result = await attachVendorInvoiceReceiptAction({
         branchId,
@@ -304,6 +319,10 @@ export function VendorsDashboard({
       if (!result.success) {
         setError(result.error ?? 'Failed to upload receipt.');
         setUploadingInvoiceId(null);
+        setReceiptStateByInvoiceId((current) => ({
+          ...current,
+          [invoice.id]: invoice.receiptUrl ? 'ready' : 'empty',
+        }));
         return;
       }
 
@@ -311,6 +330,7 @@ export function VendorsDashboard({
       setInvoices((current) =>
         current.map((item) => (item.id === invoice.id ? { ...item, receiptUrl } : item)),
       );
+      setReceiptStateByInvoiceId((current) => ({ ...current, [invoice.id]: receiptUrl ? 'ready' : 'empty' }));
       setMessage('Receipt uploaded successfully.');
       setUploadingInvoiceId(null);
     });
@@ -318,10 +338,13 @@ export function VendorsDashboard({
 
   const onGenerateSmartReport = () => {
     setSmartAnalysisError(null);
+    const normalizedPeriod = /^\d{4}-(0[1-9]|1[0-2])$/.test(selectedPeriod)
+      ? selectedPeriod
+      : new Date().toISOString().slice(0, 7);
     startSmartReportTransition(async () => {
       const result = await getVendorSmartAnalysisAction({
         branchId,
-        period: selectedPeriod,
+        period: normalizedPeriod,
       });
       if (!result.success) {
         setSmartAnalysisError(result.error ?? 'Failed to generate smart report.');
@@ -428,6 +451,24 @@ export function VendorsDashboard({
         </Button>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Total Vendor Spend</p>
+          <p className="mt-2 text-3xl font-black text-slate-900">{formatCurrency(totalForMonth)}</p>
+        </Card>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Outstanding Payables</p>
+          <p className="mt-2 text-3xl font-black text-slate-900">{formatCurrency(outstandingPayables)}</p>
+        </Card>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Cost Inflation %</p>
+          <p className={`mt-2 text-3xl font-black ${costInflationPct > 0 ? 'text-rose-600' : costInflationPct < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+            {costInflationPct >= 0 ? '+' : ''}
+            {costInflationPct.toFixed(2)}%
+          </p>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         {trendSummary.map((summary) => {
           const total = totalsByVendor[summary.vendor] ?? 0;
@@ -452,7 +493,7 @@ export function VendorsDashboard({
               </div>
 
               <div className="mt-4 h-20 rounded-2xl border border-slate-200 bg-slate-50 p-2">
-                <ResponsiveContainer width="100%" height="100%">
+                <ChartContainer config={vendorSparklineConfig} className="h-full w-full">
                   <AreaChart data={summary.points}>
                     <defs>
                       <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -463,14 +504,14 @@ export function VendorsDashboard({
                     <Area
                       type="monotone"
                       dataKey="total"
-                      stroke="#6366f1"
+                      stroke="var(--color-total)"
                       strokeWidth={2}
                       fill={`url(#${gradientId})`}
                       fillOpacity={1}
                       isAnimationActive={false}
                     />
                   </AreaChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </div>
 
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -531,6 +572,20 @@ export function VendorsDashboard({
                         )}
                         <Button
                           size="sm"
+                          variant="outline"
+                          className="rounded-lg border-slate-300"
+                          disabled={isDeletingInvoice || isUploadingReceipt || isSubmittingInvoice}
+                          onClick={() => uploadInputRefs.current[invoice.id]?.click()}
+                        >
+                          {isUploadingReceipt && uploadingInvoiceId === invoice.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Receipt className="h-3.5 w-3.5" />
+                          )}
+                          {invoice.receiptUrl ? 'Replace' : 'Upload'}
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="destructive"
                           onClick={() => onDeleteInvoice(invoice)}
                           disabled={isDeletingInvoice || isUploadingReceipt || isSubmittingInvoice}
@@ -580,6 +635,7 @@ export function VendorsDashboard({
                   const isRowPending =
                     (isDeletingInvoice && deletingInvoiceId === invoice.id) ||
                     (isUploadingReceipt && uploadingInvoiceId === invoice.id);
+                  const receiptState = receiptStateByInvoiceId[invoice.id] ?? (invoice.receiptUrl ? 'ready' : 'empty');
                   return (
                     <tr
                       key={invoice.id}
@@ -605,19 +661,24 @@ export function VendorsDashboard({
                           }}
                         />
                         {invoice.receiptUrl ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="rounded-lg border-slate-300"
-                            onClick={() => window.open(invoice.receiptUrl ?? '', '_blank')}
-                            disabled={isRowPending}
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            View
-                          </Button>
+                          <div className="inline-flex items-center gap-2">
+                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                              File Ready
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-lg border-slate-300"
+                              onClick={() => window.open(invoice.receiptUrl ?? '', '_blank')}
+                              disabled={isRowPending}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              View
+                            </Button>
+                          </div>
                         ) : (
                           <Badge variant="outline" className="border-slate-200 text-slate-500">
-                            No Receipt
+                            No File
                           </Badge>
                         )}
                       </td>
@@ -630,12 +691,12 @@ export function VendorsDashboard({
                             disabled={isRowPending}
                             onClick={() => uploadInputRefs.current[invoice.id]?.click()}
                           >
-                            {isUploadingReceipt && uploadingInvoiceId === invoice.id ? (
+                            {receiptState === 'uploading' ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
                               <Receipt className="h-3.5 w-3.5" />
                             )}
-                            Upload
+                            {receiptState === 'uploading' ? 'Uploading...' : invoice.receiptUrl ? 'Replace' : 'Upload'}
                           </Button>
                           <Button
                             size="sm"
