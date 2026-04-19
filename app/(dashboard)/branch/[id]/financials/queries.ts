@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { authorize } from "@/lib/auth/authorize";
 import { addMonths, monthEndIso, monthStartIso, nextMonthStartIso } from "@/lib/domain/date";
 import {
   MONTHLY_PNL_DEDUCTION_CATEGORIES,
@@ -81,6 +82,9 @@ export async function getFinancialsDashboardData(
   branchId: string,
   selectedPeriod: string,
 ): Promise<FinancialsDashboardData> {
+  const access = await authorize({ module: "financials", action: "read", branchId });
+  if (!access.ok) notFound();
+
   const selectedStart = monthStartIso(selectedPeriod);
   const selectedEnd = monthEndIso(selectedPeriod);
   const nextMonthStart = nextMonthStartIso(selectedPeriod);

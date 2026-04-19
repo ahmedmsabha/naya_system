@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { authorize } from "@/lib/auth/authorize";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getWeekDatesForDate, parseWarehouseIsoDate, type WeekdayKey } from "@/lib/warehouse/week-dates";
@@ -33,6 +34,8 @@ export async function addIngredient(formData: FormData) {
   const costPerUnit = parsed.data.cost_per_unit;
 
   if (!name.trim()) return { error: "Item name is required" };
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   // Insert into ingredients (global)
   const { data: ingredient, error: ingError } = await supabase
@@ -67,6 +70,8 @@ export async function updateQuantity(formData: FormData) {
   const inventoryId = parsed.data.inventory_id;
   const branchId = parsed.data.branch_id;
   const delta = parsed.data.delta;
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   // Fetch current quantity
   const { data: inv, error: fetchError } = await supabase
@@ -120,6 +125,8 @@ export async function setQuantity(formData: FormData) {
   const inventoryId = parsed.data.inventory_id;
   const branchId = parsed.data.branch_id;
   const quantity = parsed.data.quantity;
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   // Fetch current to compute delta (so we can log purchases by day)
   const { data: inv, error: fetchError } = await supabase
@@ -171,6 +178,8 @@ export async function deleteInventoryItem(formData: FormData) {
   const supabase = await createClient();
   const inventoryId = parsed.data.inventory_id;
   const branchId = parsed.data.branch_id;
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { error } = await supabase.from("inventory").delete().eq("id", inventoryId).eq("branch_id", branchId);
   if (error) return { error: error.message };
@@ -192,6 +201,8 @@ export async function upsertDistribution(formData: FormData) {
   const ingredientId = parsed.data.ingredient_id;
   const date = parsed.data.date;
   const quantity = parsed.data.quantity;
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { error } = await supabase.from("warehouse_distributions").upsert(
     { branch_id: branchId, ingredient_id: ingredientId, distributed_at: date, quantity },
@@ -214,6 +225,8 @@ export async function setDistributionQuantity(formData: FormData) {
   const ingredientId = parsed.data.ingredient_id;
   const date = parsed.data.date;
   const quantity = parsed.data.quantity;
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { error } = await supabase.from("warehouse_distributions").upsert(
     { branch_id: branchId, ingredient_id: ingredientId, distributed_at: date, quantity },
@@ -234,6 +247,8 @@ export async function resetDistributions(formData: FormData) {
   const branchId = parsed.data.branch_id;
   const weekStart = parsed.data.week_start;
   const weekEnd = parsed.data.week_end;
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { error } = await supabase
     .from("warehouse_distributions")
@@ -351,6 +366,8 @@ export async function deleteArchivedInvoice(formData: FormData) {
   const supabase = await createClient();
   const invoiceId = parsed.data.invoice_id;
   const branchId = parsed.data.branch_id;
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { data: deletedInvoice, error } = await supabase
     .from("warehouse_invoices")
@@ -399,6 +416,8 @@ export async function upsertWeeklyInvoice(formData: FormData) {
   const anchorDateIso = parseWarehouseIsoDate(anchorDateRaw);
 
   if (!branchId) return { error: "Missing branch_id" };
+  const access = await authorize({ module: "warehouse", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   try {
     const { weekStartIso, weekEndIso, invoiceItems, totalAmount } = await buildWeeklyInvoiceSnapshot(

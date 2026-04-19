@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteStaff, toggleStaffAdpStatus, upsertStaffingSnapshot } from "@/app/(dashboard)/branch/[id]/staffing/actions";
 import { StarRating } from "@/components/staffing/StarRating";
@@ -78,6 +78,41 @@ export function StaffTable({
   const [salaryEditorFor, setSalaryEditorFor] = useState<string | null>(null);
   const [salaryDraftById, setSalaryDraftById] = useState<Record<string, { p1: string; p2: string }>>({});
   const [allowHistorical, setAllowHistorical] = useState(false);
+  const [optimisticSnapshot, setOptimisticSnapshot] = useState<Record<string, StaffingRecord>>(selectedSnapshot);
+  const [optimisticAdpById, setOptimisticAdpById] = useState<Record<string, string>>(
+    Object.fromEntries(employees.map((employee) => [employee.id, employee.adp_status]))
+  );
+  const [rowMessageById, setRowMessageById] = useState<Record<string, string>>({});
+  const rowMessageTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    setOptimisticSnapshot(selectedSnapshot);
+  }, [selectedSnapshot]);
+
+  useEffect(() => {
+    setOptimisticAdpById(Object.fromEntries(employees.map((employee) => [employee.id, employee.adp_status])));
+  }, [employees]);
+
+  useEffect(() => {
+    const activeTimers = rowMessageTimers.current;
+    return () => {
+      for (const timer of Object.values(activeTimers)) clearTimeout(timer);
+    };
+  }, []);
+
+  const showRowMessage = (staffId: string, message: string) => {
+    setRowMessageById((prev) => ({ ...prev, [staffId]: message }));
+    const previousTimer = rowMessageTimers.current[staffId];
+    if (previousTimer) clearTimeout(previousTimer);
+    rowMessageTimers.current[staffId] = setTimeout(() => {
+      setRowMessageById((prev) => {
+        const next = { ...prev };
+        delete next[staffId];
+        return next;
+      });
+      delete rowMessageTimers.current[staffId];
+    }, 2200);
+  };
 
   const staffById = useMemo(() => {
     const m = new Map<string, EmployeeStatic>();
@@ -86,7 +121,7 @@ export function StaffTable({
   }, [employees]);
 
   const editingEmployee = editId ? staffById.get(editId) ?? null : null;
-  const editingRecord = editId ? selectedSnapshot[editId] ?? fallbackRecord() : null;
+  const editingRecord = editId ? optimisticSnapshot[editId] ?? fallbackRecord() : null;
 
   const filtered = employees.filter((r) => {
     const hay = `${r.full_name} ${r.email ?? ""} ${r.phone ?? ""} ${r.employee_code ?? ""}`.toLowerCase();
@@ -110,6 +145,10 @@ export function StaffTable({
   };
 
   const onToggleAdp = (staffId: string) => {
+    const previousStatus = optimisticAdpById[staffId] ?? "not_connected";
+    const nextStatus = previousStatus === "connected" ? "not_connected" : "connected";
+    setOptimisticAdpById((prev) => ({ ...prev, [staffId]: nextStatus }));
+    showRowMessage(staffId, "Saving ADP status...");
     setTogglingAdpId(staffId);
     const fd = new FormData();
     fd.set("branch_id", branchId);
@@ -117,7 +156,12 @@ export function StaffTable({
     startTransition(async () => {
       const res = await toggleStaffAdpStatus(fd);
       const error = getActionError(res);
-      if (error) alert(error);
+      if (error) {
+        setOptimisticAdpById((prev) => ({ ...prev, [staffId]: previousStatus }));
+        alert(error);
+      } else {
+        showRowMessage(staffId, nextStatus === "connected" ? "ADP connected" : "ADP disconnected");
+      }
       setTogglingAdpId(null);
       router.refresh();
     });
@@ -129,8 +173,10 @@ export function StaffTable({
       if (!ok) return;
     }
 
-    const base = selectedSnapshot[staffId] ?? fallbackRecord();
+    const base = optimisticSnapshot[staffId] ?? fallbackRecord();
     const next: StaffingRecord = { ...base, ...patch };
+    setOptimisticSnapshot((prev) => ({ ...prev, [staffId]: next }));
+    showRowMessage(staffId, "Saving update...");
 
     const fd = new FormData();
     fd.set("branch_id", branchId);
@@ -150,7 +196,16 @@ export function StaffTable({
     startTransition(async () => {
       const res = await upsertStaffingSnapshot(fd);
       const error = getActionError(res);
-      if (error) alert(error);
+      if (error) {
+        setOptimisticSnapshot((prev) => ({ ...prev, [staffId]: base }));
+        alert(error);
+      } else if (saveKey.endsWith("-rating")) {
+        showRowMessage(staffId, "Rating saved");
+      } else if (saveKey.endsWith("-salary")) {
+        showRowMessage(staffId, "Salary saved");
+      } else {
+        showRowMessage(staffId, "Saved");
+      }
       setQuickSavingKey(null);
       router.refresh();
     });
@@ -243,10 +298,11 @@ export function StaffTable({
 
           <tbody>
             {filtered.map((r) => {
-              const current = selectedSnapshot[r.id] ?? null;
+              const current = optimisticSnapshot[r.id] ?? null;
               const effective = current ?? fallbackRecord();
-              const isConnected = r.adp_status === "connected";
+              const isConnected = (optimisticAdpById[r.id] ?? r.adp_status) === "connected";
               const isPending = pendingId === r.id;
+              const isRatingSaving = quickSavingKey === `${r.id}-rating`;
               const totalSalary = Number(effective.salaryP1 || 0) + Number(effective.salaryP2 || 0);
               const statusTone =
                 effective.status === "active"
@@ -288,6 +344,9 @@ export function StaffTable({
                       ) : null}
                       {isConnected ? "ADP connected" : "Not connected"}
                     </button>
+                    {togglingAdpId === r.id ? (
+                      <div className="mt-2 text-[10px] font-black text-[#2563eb]">Updating ADP...</div>
+                    ) : null}
                   </td>
                   <td className="py-7 px-4 text-center text-[12px] font-bold text-gray-500">
                     <div className="flex flex-col gap-1">
@@ -307,6 +366,7 @@ export function StaffTable({
                                 key={`${r.id}-rating-${ratingValue}`}
                                 type="button"
                                 title={`Set rating to ${ratingValue}`}
+                                disabled={isRatingSaving}
                                 onClick={() =>
                                   saveSnapshotQuick(
                                     r.id,
@@ -314,14 +374,15 @@ export function StaffTable({
                                     `${r.id}-rating`
                                   )
                                 }
-                                className="h-full w-full"
+                                className="h-full w-full disabled:cursor-wait"
                               />
                             );
                           })}
                         </div>
                       </div>
-                      <span className="text-[10px] font-black text-gray-400">
+                      <span className="text-[10px] font-black text-gray-400 inline-flex items-center gap-1.5">
                         {effective.performanceRating.toFixed(1)}
+                        {isRatingSaving ? <Loader2 className="w-3 h-3 animate-spin text-[#2563eb]" /> : null}
                       </span>
                     </div>
                   </td>
@@ -427,6 +488,9 @@ export function StaffTable({
                     </div>
                     {quickSavingKey?.startsWith(`${r.id}-`) ? (
                       <div className="mt-2 text-right text-[10px] font-black text-[#2563eb]">Saving...</div>
+                    ) : null}
+                    {rowMessageById[r.id] ? (
+                      <div className="mt-1 text-right text-[10px] font-black text-gray-400">{rowMessageById[r.id]}</div>
                     ) : null}
                   </td>
                 </tr>

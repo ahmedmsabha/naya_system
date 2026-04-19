@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { resetDistributions, setDistributionQuantity } from "@/app/(dashboard)/branch/[id]/warehouse/actions";
 import { type DateKeyedQuantities } from "@/lib/warehouse/date-keyed-quantities";
 import { formatNumberEn } from "@/lib/format/en";
+import { Loader2 } from "lucide-react";
 
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"] as const;
 
@@ -153,7 +154,8 @@ export function ScheduleTable({
           disabled={isPendingReset}
           className="text-[11px] font-bold text-red-500 hover:text-red-700 transition-colors disabled:opacity-50 flex items-center gap-1 uppercase"
         >
-          🗑 Clear week data
+          {isPendingReset ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "🗑"}
+          {isPendingReset ? "Clearing..." : "Clear week data"}
         </button>
       </div>
 

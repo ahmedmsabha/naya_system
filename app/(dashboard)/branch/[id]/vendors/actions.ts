@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { authorize } from '@/lib/auth/authorize';
 import {
   VENDOR_PAYABLE_CATEGORIES,
   isVendorPayableCategory,
@@ -150,6 +151,12 @@ export async function uploadVendorInvoiceReceiptAction(
 ): Promise<ActionResult<{ receiptUrl: string }>> {
   const parsed = uploadVendorReceiptSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'Invalid receipt payload.' };
+  const access = await authorize({
+    module: 'vendors',
+    action: 'edit',
+    branchId: parsed.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
   return uploadVendorReceipt(parsed.data);
 }
 
@@ -158,6 +165,12 @@ export async function attachVendorInvoiceReceiptAction(
 ): Promise<ActionResult<{ receiptUrl: string }>> {
   const parsed = attachVendorReceiptSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'Invalid attach receipt payload.' };
+  const access = await authorize({
+    module: 'vendors',
+    action: 'edit',
+    branchId: parsed.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const uploaded = await uploadVendorInvoiceReceiptAction(parsed.data);
   if (!uploaded.success) return uploaded;
@@ -184,6 +197,12 @@ export async function addVendorInvoiceAction(
 ): Promise<ActionResult<{ id: string; receiptUrl: string | null }>> {
   const parsed = addVendorInvoiceSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'Invalid vendor invoice payload.' };
+  const access = await authorize({
+    module: 'vendors',
+    action: 'edit',
+    branchId: parsed.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const amount = Number(parsed.data.amount);
 
@@ -238,6 +257,12 @@ export async function deleteVendorInvoiceAction(
 ): Promise<ActionResult> {
   const parsed = deleteVendorInvoiceSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'Invalid delete invoice payload.' };
+  const access = await authorize({
+    module: 'vendors',
+    action: 'edit',
+    branchId: parsed.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const supabase = await createClient();
   const { data: deletedInvoice, error } = await supabase
@@ -268,6 +293,12 @@ export async function getVendorSmartAnalysisAction(
 ): Promise<ActionResult<VendorSmartAnalysisData>> {
   const parsed = vendorSmartAnalysisSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'Invalid smart analysis payload.' };
+  const access = await authorize({
+    module: 'vendors',
+    action: 'read',
+    branchId: parsed.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const periods = monthSequence(parsed.data.period, 6);
   const startDate = monthStartIso(periods[0]);

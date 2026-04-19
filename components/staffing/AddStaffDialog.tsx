@@ -251,7 +251,7 @@ export function AddStaffDialog({ branchId, selectedPeriod }: { branchId: string;
                       <input
                         name="performance_rating"
                         type="number"
-                        step="0.5"
+                        step="0.1"
                         min="0"
                         max="5"
                         defaultValue="0"

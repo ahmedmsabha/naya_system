@@ -35,7 +35,8 @@ export function TarekAccountant({
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [, startTransition] = useTransition();
+  const [isDeleting, startTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const projectOptions = useMemo(() => {
     const uniq = Array.from(new Set(invoices.map((i) => i.project_name).filter(Boolean)));
@@ -68,9 +69,14 @@ export function TarekAccountant({
 
   const handleDelete = (id: string) => {
     if (!confirm("Are you sure you want to delete this invoice?")) return;
+    setDeletingId(id);
     startTransition(async () => {
-      await deleteAccountantInvoice(id);
-      setInvoices(prev => prev.filter(inv => inv.id !== id));
+      try {
+        await deleteAccountantInvoice(id);
+        setInvoices(prev => prev.filter(inv => inv.id !== id));
+      } finally {
+        setDeletingId(null);
+      }
     });
   };
 
@@ -266,9 +272,14 @@ export function TarekAccountant({
                       <td className="py-6 text-center">
                         <button 
                           onClick={() => handleDelete(inv.id)}
-                          className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                          disabled={isDeleting && deletingId === inv.id}
+                          className="p-2 text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50"
                         >
-                          <Trash className="w-5 h-5" />
+                          {isDeleting && deletingId === inv.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Trash className="w-5 h-5" />
+                          )}
                         </button>
                       </td>
                     </tr>

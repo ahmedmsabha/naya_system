@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { authorize } from "@/lib/auth/authorize";
 import { monthEndIso, monthStartIso } from "@/lib/domain/date";
 import { toMoney } from "@/lib/domain/money";
 
@@ -17,6 +18,9 @@ export type BranchHubData = {
 };
 
 export async function getBranchHubData(branchId: string, period: string): Promise<BranchHubData> {
+  const access = await authorize({ module: "dashboard", action: "read", branchId });
+  if (!access.ok) notFound();
+
   const supabase = await createClient();
   const start = monthStartIso(period);
   const end = monthEndIso(period);

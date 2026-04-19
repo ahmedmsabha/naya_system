@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { authorize } from '@/lib/auth/authorize';
 import { revalidatePath } from 'next/cache';
 import {
   MONTHLY_PNL_DEDUCTION_CATEGORIES,
@@ -46,6 +47,8 @@ export async function addSuppliersAction(formData: FormData) {
     .filter((name) => !isBlockedVendorName(name));
 
   if (!branchId || candidates.length === 0) return { success: false, error: 'No suppliers to add.' };
+  const access = await authorize({ module: 'financials', action: 'edit', branchId });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const supabase = await createClient();
   const { data: existingRows } = await supabase
@@ -78,6 +81,8 @@ export async function deleteSupplierAction(formData: FormData) {
 
   const branchId = parsedForm.data.branch_id;
   const supplierId = parsedForm.data.supplier_id;
+  const access = await authorize({ module: 'financials', action: 'edit', branchId });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const supabase = await createClient();
   await supabase.from('suppliers').delete().eq('id', supplierId);
@@ -137,6 +142,12 @@ export async function upsertExpense(input: UpsertExpenseInput): Promise<UpsertEx
   if (!isMonthlyPnLCategory(parsedInput.data.category)) {
     return { success: false, error: 'Invalid expense category.' };
   }
+  const access = await authorize({
+    module: 'financials',
+    action: 'edit',
+    branchId: parsedInput.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const amount = Number(parsedInput.data.amount);
 
@@ -194,6 +205,12 @@ export async function upsertDeductions(
   if (!validateMonthPeriod(parsedInput.data.monthPeriod)) {
     return { success: false, error: 'Month period must be in YYYY-MM format.' };
   }
+  const access = await authorize({
+    module: 'financials',
+    action: 'edit',
+    branchId: parsedInput.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
 
   const rows = MONTHLY_PNL_DEDUCTION_CATEGORIES.map((category) => {
     const amount = Number(parsedInput.data.values[category] ?? 0);

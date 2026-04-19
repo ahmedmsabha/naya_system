@@ -1,7 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopHeader } from "@/components/layout/TopHeader";
 import { TarekFloatingButton } from "@/components/finance/TarekFloatingButton";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentActor } from "@/lib/auth/actor";
 import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({
@@ -9,10 +9,8 @@ export default async function DashboardLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = await createClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (!user || error) {
+  const actor = await getCurrentActor();
+  if (!actor) {
     redirect("/login");
   }
   return (

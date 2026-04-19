@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { authorize } from "@/lib/auth/authorize";
 import { revalidatePath } from "next/cache";
 import {
   syncLaborExpenseForPeriod,
@@ -104,6 +105,8 @@ export async function addStaff(formData: FormData) {
 
   if (!branchId) return { error: "Missing branch id" };
   if (!fullName) return { error: "Full name is required" };
+  const access = await authorize({ module: "staffing", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { data: created, error: createError } = await supabase
     .from("branch_staff")
@@ -162,6 +165,8 @@ export async function bulkAddStaff(formData: FormData) {
 
   if (!branchId) return { error: "Missing branch id" };
   if (!raw.trim()) return { error: "Paste at least one line" };
+  const access = await authorize({ module: "staffing", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const lines = raw.split("\n").map((x) => x.trim()).filter(Boolean);
   let inserted = 0;
@@ -224,6 +229,8 @@ export async function deleteStaff(formData: FormData) {
   const supabase = await createClient();
   const branchId = parsed.data.branch_id;
   const staffId = parsed.data.staff_id;
+  const access = await authorize({ module: "staffing", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { error } = await supabase.from("branch_staff").delete().eq("id", staffId).eq("branch_id", branchId);
   if (error) return { error: error.message };
@@ -244,6 +251,8 @@ export async function upsertStaffingSnapshot(formData: FormData) {
   const staffId = parsed.data.staff_id;
   const selectedPeriod = parsed.data.selected_period;
   const allowHistorical = parsed.data.allow_historical === "1";
+  const access = await authorize({ module: "staffing", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const targetMonth = selectedPeriod.slice(0, 7);
   if (!allowHistorical && targetMonth < monthKeyNow()) {
@@ -305,6 +314,8 @@ export async function toggleStaffAdpStatus(formData: FormData) {
   const supabase = await createClient();
   const branchId = parsed.data.branch_id;
   const staffId = parsed.data.staff_id;
+  const access = await authorize({ module: "staffing", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   const { data: current, error: fetchError } = await supabase
     .from("branch_staff")
@@ -332,6 +343,8 @@ export async function syncPayroll(formData: FormData) {
 
   const supabase = await createClient();
   const branchId = parsed.data.branch_id;
+  const access = await authorize({ module: "staffing", action: "edit", branchId });
+  if (!access.ok) return { error: access.reason ?? "Unauthorized" };
 
   // Placeholder: log a sync attempt. (Later: call ADP integration.)
   const { error } = await supabase.from("branch_payroll_syncs").insert({
