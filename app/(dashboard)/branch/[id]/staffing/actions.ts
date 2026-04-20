@@ -119,6 +119,7 @@ export async function addStaff(formData: FormData) {
       adp_status: adpStatus,
       base_salary: salaryP1 + salaryP2,
       salary_period: "semi_monthly",
+      performance_rating: performanceRating,
       status: employmentStatus === "terminated" ? "inactive" : "active",
       hired_at: new Date().toISOString().slice(0, 10),
     })

@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   ArrowUpRight,
   Building2,
@@ -9,6 +10,7 @@ import {
   Download,
   Eye,
   Loader2,
+  Pencil,
   Plus,
   Receipt,
   ReceiptText,
@@ -29,6 +31,7 @@ import {
   attachVendorInvoiceReceiptAction,
   deleteVendorInvoiceAction,
   getVendorSmartAnalysisAction,
+  updateVendorInvoiceAction,
 } from '@/app/(dashboard)/branch/[id]/vendors/actions';
 import {
   VendorSmartAnalysis,
@@ -131,6 +134,7 @@ export function VendorsDashboard({
   initialMonthlyTotals,
   trendSeriesByVendor,
 }: VendorsDashboardProps) {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<VendorInvoiceRow[]>(initialInvoices);
   const [activeVendor, setActiveVendor] = useState<VendorPayableCategory | null>(null);
   const [amountInput, setAmountInput] = useState('');
@@ -141,9 +145,14 @@ export function VendorsDashboard({
   const [isSubmittingInvoice, startSubmitTransition] = useTransition();
   const [isDeletingInvoice, startDeleteTransition] = useTransition();
   const [isUploadingReceipt, startUploadTransition] = useTransition();
+  const [isSavingInvoiceEdit, startSaveEditTransition] = useTransition();
   const [isGeneratingSmartReport, startSmartReportTransition] = useTransition();
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
   const [uploadingInvoiceId, setUploadingInvoiceId] = useState<string | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<VendorInvoiceRow | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editInvoiceDate, setEditInvoiceDate] = useState('');
+  const [editVendor, setEditVendor] = useState<VendorPayableCategory | ''>('');
   const [isSmartAnalysisOpen, setIsSmartAnalysisOpen] = useState(false);
   const [smartAnalysisData, setSmartAnalysisData] = useState<VendorSmartAnalysisData | null>(null);
   const [smartAnalysisError, setSmartAnalysisError] = useState<string | null>(null);
@@ -152,6 +161,18 @@ export function VendorsDashboard({
     Object.fromEntries(initialInvoices.map((invoice) => [invoice.id, invoice.receiptUrl ? 'ready' : 'empty'])),
   );
   const uploadInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    setInvoices(initialInvoices);
+  }, [initialInvoices]);
+
+  useEffect(() => {
+    setReceiptStateByInvoiceId(
+      Object.fromEntries(
+        initialInvoices.map((invoice) => [invoice.id, invoice.receiptUrl ? 'ready' : 'empty']),
+      ),
+    );
+  }, [initialInvoices]);
 
   const minDate = periodStart(selectedPeriod);
   const maxDate = periodEnd(selectedPeriod);
@@ -229,6 +250,64 @@ export function VendorsDashboard({
     setActiveVendor(null);
   };
 
+  const openEditInvoice = (invoice: VendorInvoiceRow) => {
+    setEditingInvoice(invoice);
+    setEditAmount(String(invoice.amount));
+    setEditInvoiceDate(invoice.invoiceDate.slice(0, 10));
+    setEditVendor(invoice.vendorName);
+    setError(null);
+    setMessage(null);
+  };
+
+  const closeEditInvoice = () => {
+    setEditingInvoice(null);
+  };
+
+  const onSaveInvoiceEdit = () => {
+    if (!editingInvoice || !editVendor) return;
+
+    const amount = parseAmount(editAmount);
+    if (amount <= 0) {
+      setError('Amount must be greater than zero.');
+      return;
+    }
+    if (!editInvoiceDate) {
+      setError('Invoice date is required.');
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+    startSaveEditTransition(async () => {
+      const result = await updateVendorInvoiceAction({
+        branchId,
+        invoiceId: editingInvoice.id,
+        vendorName: editVendor,
+        invoiceDate: editInvoiceDate,
+        amount,
+      });
+      if (!result.success) {
+        setError(result.error ?? 'Failed to save changes.');
+        return;
+      }
+
+      setInvoices((current) =>
+        current.map((item) =>
+          item.id === editingInvoice.id
+            ? {
+                ...item,
+                vendorName: editVendor,
+                invoiceDate: editInvoiceDate,
+                amount: Number(amount.toFixed(2)),
+              }
+            : item,
+        ),
+      );
+      setMessage('Invoice updated.');
+      closeEditInvoice();
+    });
+  };
+
   const onSubmitInvoice = () => {
     if (!activeVendor) return;
 
@@ -278,6 +357,7 @@ export function VendorsDashboard({
 
       setMessage(`${activeVendor} invoice logged successfully.`);
       closeModal();
+      router.refresh();
     });
   };
 
@@ -299,6 +379,7 @@ export function VendorsDashboard({
       setInvoices((current) => current.filter((item) => item.id !== invoice.id));
       setMessage('Invoice deleted.');
       setDeletingInvoiceId(null);
+      router.refresh();
     });
   };
 
@@ -333,6 +414,7 @@ export function VendorsDashboard({
       setReceiptStateByInvoiceId((current) => ({ ...current, [invoice.id]: receiptUrl ? 'ready' : 'empty' }));
       setMessage('Receipt uploaded successfully.');
       setUploadingInvoiceId(null);
+      router.refresh();
     });
   };
 
@@ -634,7 +716,8 @@ export function VendorsDashboard({
                 tableInvoices.map((invoice) => {
                   const isRowPending =
                     (isDeletingInvoice && deletingInvoiceId === invoice.id) ||
-                    (isUploadingReceipt && uploadingInvoiceId === invoice.id);
+                    (isUploadingReceipt && uploadingInvoiceId === invoice.id) ||
+                    (isSavingInvoiceEdit && editingInvoice?.id === invoice.id);
                   const receiptState = receiptStateByInvoiceId[invoice.id] ?? (invoice.receiptUrl ? 'ready' : 'empty');
                   return (
                     <tr
@@ -700,6 +783,20 @@ export function VendorsDashboard({
                           </Button>
                           <Button
                             size="sm"
+                            variant="outline"
+                            className="rounded-lg border-slate-300"
+                            onClick={() => openEditInvoice(invoice)}
+                            disabled={isRowPending}
+                          >
+                            {isSavingInvoiceEdit && editingInvoice?.id === invoice.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Pencil className="h-3.5 w-3.5" />
+                            )}
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
                             variant="destructive"
                             onClick={() => onDeleteInvoice(invoice)}
                             disabled={isRowPending}
@@ -727,6 +824,95 @@ export function VendorsDashboard({
           </table>
         </div>
       </Card>
+
+      {editingInvoice ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
+          <Card
+            className={`w-full max-w-lg rounded-[1.6rem] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)] ${
+              isSavingInvoiceEdit ? 'opacity-70 pointer-events-none' : ''
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Edit invoice
+                </p>
+                <h3 className="mt-1 text-2xl font-black text-slate-900">Update entry</h3>
+              </div>
+              <Button variant="ghost" size="sm" onClick={closeEditInvoice} disabled={isSavingInvoiceEdit}>
+                Close
+              </Button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Vendor</span>
+                <select
+                  value={editVendor}
+                  onChange={(event) => setEditVendor(event.target.value as VendorPayableCategory)}
+                  disabled={isSavingInvoiceEdit}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-500"
+                >
+                  {VENDOR_PAYABLE_CATEGORIES.map((vendor) => (
+                    <option key={vendor} value={vendor}>
+                      {vendor}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Amount</span>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-500">$</span>
+                  <input
+                    value={editAmount}
+                    onChange={(event) => setEditAmount(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    disabled={isSavingInvoiceEdit}
+                    className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-7 pr-3 text-sm font-medium text-slate-900 outline-none focus:border-slate-500"
+                  />
+                </div>
+              </label>
+
+              <label className="block space-y-2">
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <CalendarClock className="h-4 w-4 text-slate-500" />
+                  Invoice date
+                </span>
+                <input
+                  type="date"
+                  value={editInvoiceDate}
+                  min={minDate}
+                  max={maxDate}
+                  onChange={(event) => setEditInvoiceDate(event.target.value)}
+                  disabled={isSavingInvoiceEdit}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={closeEditInvoice} disabled={isSavingInvoiceEdit}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-indigo-600 text-white hover:bg-indigo-700"
+                onClick={onSaveInvoiceEdit}
+                disabled={isSavingInvoiceEdit}
+              >
+                {isSavingInvoiceEdit ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Pencil className="h-4 w-4" />
+                )}
+                {isSavingInvoiceEdit ? 'Saving...' : 'Save changes'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
 
       {activeVendor ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">

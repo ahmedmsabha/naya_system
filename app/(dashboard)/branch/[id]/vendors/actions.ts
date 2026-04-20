@@ -18,6 +18,7 @@ import {
   addVendorInvoiceSchema,
   attachVendorReceiptSchema,
   deleteVendorInvoiceSchema,
+  updateVendorInvoiceSchema,
   uploadVendorReceiptSchema,
   vendorSmartAnalysisSchema,
 } from './schemas';
@@ -39,6 +40,14 @@ type AddVendorInvoiceInput = {
 type DeleteVendorInvoiceInput = {
   branchId: string;
   invoiceId: string;
+};
+
+type UpdateVendorInvoiceInput = {
+  branchId: string;
+  invoiceId: string;
+  vendorName: VendorPayableCategory;
+  invoiceDate: string;
+  amount: number;
 };
 
 type UploadVendorReceiptInput = {
@@ -281,6 +290,55 @@ export async function deleteVendorInvoiceAction(
       parsed.data.branchId,
       periodKeyFromDateIso(String(deletedInvoice.invoice_date)),
     );
+  }
+
+  revalidatePath(`/branch/${parsed.data.branchId}/vendors`);
+  revalidatePath(`/branch/${parsed.data.branchId}/financials`);
+  return { success: true };
+}
+
+export async function updateVendorInvoiceAction(
+  input: UpdateVendorInvoiceInput,
+): Promise<ActionResult> {
+  const parsed = updateVendorInvoiceSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'Invalid vendor invoice update payload.' };
+  const access = await authorize({
+    module: 'vendors',
+    action: 'edit',
+    branchId: parsed.data.branchId,
+  });
+  if (!access.ok) return { success: false, error: access.reason ?? 'Unauthorized' };
+
+  const supabase = await createClient();
+  const { data: existing, error: fetchError } = await supabase
+    .from('vendor_invoices')
+    .select('invoice_date')
+    .eq('id', parsed.data.invoiceId)
+    .eq('branch_id', parsed.data.branchId)
+    .maybeSingle();
+
+  if (fetchError) return { success: false, error: fetchError.message };
+  if (!existing) return { success: false, error: 'Invoice not found.' };
+
+  const prevPeriod = periodKeyFromDateIso(String(existing.invoice_date));
+  const nextPeriod = periodKeyFromDateIso(parsed.data.invoiceDate);
+  const amount = Number(Number(parsed.data.amount).toFixed(2));
+
+  const { error } = await supabase
+    .from('vendor_invoices')
+    .update({
+      vendor_name: parsed.data.vendorName,
+      invoice_date: parsed.data.invoiceDate,
+      amount,
+    })
+    .eq('id', parsed.data.invoiceId)
+    .eq('branch_id', parsed.data.branchId);
+
+  if (error) return { success: false, error: error.message };
+
+  await syncVendorExpensesForPeriod(supabase, parsed.data.branchId, prevPeriod);
+  if (nextPeriod !== prevPeriod) {
+    await syncVendorExpensesForPeriod(supabase, parsed.data.branchId, nextPeriod);
   }
 
   revalidatePath(`/branch/${parsed.data.branchId}/vendors`);
