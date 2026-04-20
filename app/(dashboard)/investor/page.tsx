@@ -7,7 +7,7 @@ export default async function InvestorLandingPage() {
     <ModuleBranchPicker
       title="Investor View"
       subtitle="Select a branch to open investor-grade financial intelligence."
-      buildHref={(branchId) => `/branch/${branchId}/financials?period=${period}`}
+      buildHref={(branchId) => `/branch/${branchId}/financials/performance?period=${period}`}
       emptyHint="No branches found. Add branches in Supabase to access investor views."
     />
   );

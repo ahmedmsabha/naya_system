@@ -7,7 +7,7 @@ export default async function FinancialsLandingPage() {
     <ModuleBranchPicker
       title="Financials"
       subtitle="Select a branch to open the executive P&L workspace."
-      buildHref={(branchId) => `/branch/${branchId}/financials?period=${period}`}
+      buildHref={(branchId) => `/branch/${branchId}/financials/performance?period=${period}`}
       emptyHint="No branches found. Add branches in Supabase to access financial reports."
     />
   );

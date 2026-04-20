@@ -487,7 +487,7 @@ export function VendorsDashboard({
             </p>
             <p className="mt-1 text-3xl font-black text-slate-950">{formatCurrency(totalForMonth)}</p>
             <Link
-              href={`/branch/${branchId}/financials?period=${selectedPeriod}`}
+              href={`/branch/${branchId}/financials/performance?period=${selectedPeriod}`}
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
             >
               View Monthly P&L

@@ -273,7 +273,7 @@ export default async function FinancialVariancePage({
         monthLabel={monthLabel}
         monthHrefPrev={`/branch/${id}/financials/variance?period=${addMonths(selectedPeriod, -1)}`}
         monthHrefNext={`/branch/${id}/financials/variance?period=${addMonths(selectedPeriod, 1)}`}
-        financialsHref={`/branch/${id}/financials?period=${selectedPeriod}`}
+        financialsHref={`/branch/${id}/financials/performance?period=${selectedPeriod}`}
         topLossSources={fallbackLossSources}
         matrixRows={matrixRows}
         insights={insights}

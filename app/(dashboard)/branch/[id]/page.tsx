@@ -37,7 +37,7 @@ export default async function BranchDashboard({
     },
     {
       id: "financials",
-      href: `/branch/${id}/financials`,
+      href: `/branch/${id}/financials/performance?period=${selectedPeriod}`,
       title: "Financials",
       subtitle: "P&L intelligence and margin tracking",
       icon: BarChart3,

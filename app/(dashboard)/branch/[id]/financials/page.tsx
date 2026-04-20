@@ -1,52 +1,16 @@
-import { FinancialsDashboardClient } from '@/components/finance/FinancialsDashboardClient';
-import {
-  monthKeyNow,
-  monthLabel,
-  parsePeriod,
-} from '@/lib/domain/date';
-import { getFinancialsDashboardData } from './queries';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-
-export default async function BranchFinancialsPage({
+export default async function BranchFinancialsIndexRedirect({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string | string[] }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const selectedPeriod = parsePeriod(sp.period, monthKeyNow());
-  const data = await getFinancialsDashboardData(id, selectedPeriod);
-  const currentMonthLabel = monthLabel(selectedPeriod);
-
-  return (
-    <div className="w-full" dir="ltr">
-      <FinancialsDashboardClient
-        branchId={id}
-        branchName={data.branchName}
-        monthLabel={currentMonthLabel}
-        selectedPeriod={selectedPeriod}
-        monthHrefPrev={data.monthHrefPrev}
-        monthHrefNext={data.monthHrefNext}
-        varianceHref={`/branch/${id}/financials/variance?period=${selectedPeriod}`}
-        vendorsHref={`/branch/${id}/vendors?period=${selectedPeriod}`}
-        grossSales={data.grossSales}
-        netSales={data.netSales}
-        cogs={data.cogs}
-        laborCost={data.laborCost}
-        operationsCost={data.operationsCost}
-        ebitda={data.ebitda}
-        deliverySales={data.deliverySales}
-        dineInSales={data.dineInSales}
-        averageTicket={data.averageTicket}
-        weeklySalesSeries={data.weeklySalesSeries}
-        insights={data.insights}
-        recipes={data.recipes}
-        initialRows={data.initialRows}
-        initialDeductions={data.initialDeductions}
-      />
-    </div>
-  );
+  const raw = sp.period;
+  const periodParam = Array.isArray(raw) ? raw[0] : raw;
+  const q = periodParam ? `?period=${encodeURIComponent(periodParam)}` : '';
+  redirect(`/branch/${id}/financials/performance${q}`);
 }

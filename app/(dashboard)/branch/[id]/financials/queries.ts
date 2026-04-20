@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/authorize";
@@ -78,7 +79,7 @@ function toDeductionRecord(
   };
 }
 
-export async function getFinancialsDashboardData(
+async function loadFinancialsDashboardData(
   branchId: string,
   selectedPeriod: string,
 ): Promise<FinancialsDashboardData> {
@@ -311,8 +312,8 @@ export async function getFinancialsDashboardData(
     branchId,
     branchName: String(branch.name ?? "").toUpperCase(),
     selectedPeriod,
-    monthHrefPrev: `/branch/${branchId}/financials?period=${addMonths(selectedPeriod, -1)}`,
-    monthHrefNext: `/branch/${branchId}/financials?period=${addMonths(selectedPeriod, 1)}`,
+    monthHrefPrev: `/branch/${branchId}/financials/performance?period=${addMonths(selectedPeriod, -1)}`,
+    monthHrefNext: `/branch/${branchId}/financials/performance?period=${addMonths(selectedPeriod, 1)}`,
     grossSales: Number(grossSales.toFixed(2)),
     netSales: Number(netSales.toFixed(2)),
     cogs: Number(cogs.toFixed(2)),
@@ -335,3 +336,6 @@ export async function getFinancialsDashboardData(
     })),
   };
 }
+
+/** Deduplicate RSC fetches when layout and pages both request the same branch period. */
+export const getFinancialsDashboardData = cache(loadFinancialsDashboardData);
