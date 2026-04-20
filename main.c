@@ -1,37 +1,92 @@
 #include <LPC11xx.h>
 
-#define GPIO2DIR  (*((volatile unsigned long *)0x50028000))
-#define GPIO2DATA (*((volatile unsigned long *)0x50023FFC))
 #define GPIO0DIR  (*((volatile unsigned long *)0x50008000))
 #define GPIO0DATA (*((volatile unsigned long *)0x50003FFC))
+#define GPIO2DIR  (*((volatile unsigned long *)0x50028000))
+#define GPIO2DATA (*((volatile unsigned long *)0x50023FFC))
 
-int dec_to_7seg[] = {
-    0b0111111, 0b0000110, 0b1011011, 0b1001111, 0b1100110,
-    0b1101101, 0b1111101, 0b0000111, 0b1111111, 0b1101111
-};
+void delay(int count) {
+    int i = 0;
+    for(i = 0; i <= count; i++);
+}
 
-void displayTwoDigits(int number);
-
-int main () {
-    GPIO0DIR = 0b110;
-    GPIO2DIR = 0b1111111;
-
+void send_cmd_4bit(unsigned char cmd) {
     GPIO0DATA = 0b000;
-    GPIO2DATA = 0b0000000;
 
-    while(1) {
-        displayTwoDigits(25);
+    GPIO2DATA = (cmd & 0xF0);
+
+    GPIO0DATA = 0b100;
+    delay(1000);
+    GPIO0DATA = 0b000;
+    delay(1000);
+
+    GPIO2DATA = ((cmd << 4) & 0xF0);
+
+    GPIO0DATA = 0b100;
+    delay(1000);
+    GPIO0DATA = 0b000;
+    delay(1000);
+}
+
+void send_letter_4bit(unsigned char letter) {
+    GPIO0DATA = 0b010;
+
+    GPIO2DATA = (letter & 0xF0);
+
+    GPIO0DATA = 0b110;
+    delay(1000);
+    GPIO0DATA = 0b010;
+    delay(1000);
+
+    GPIO2DATA = ((letter << 4) & 0xF0);
+
+    GPIO0DATA = 0b110;
+    delay(1000);
+    GPIO0DATA = 0b010;
+    delay(1000);
+}
+
+void send_string(char* string) {
+    while(*string != '\0') {
+        send_letter_4bit(*string);
+        string++;
     }
 }
 
-void displayTwoDigits (int number) {
-    int j = 0;
+void lcd_init_4bit() {
+    delay(15000);
 
-    GPIO0DATA = 0b100;
-    GPIO2DATA = dec_to_7seg[(number / 10) % 10];
-    for (j=0; j<100; j++);
+    GPIO0DATA = 0b000;
+    GPIO2DATA = 0x20;
+    GPIO0DATA = 0b100; // E=1
+    delay(1000);
+    GPIO0DATA = 0b000; // E=0
+    delay(1000);
 
-    GPIO0DATA = 0b010;
-    GPIO2DATA = dec_to_7seg[number % 10];
-    for (j=0; j<100; j++);
+    send_cmd_4bit(0x28);
+    send_cmd_4bit(0x0C);
+    send_cmd_4bit(0x06);
+    send_cmd_4bit(0x01);
+    delay(5000);
+}
+
+int main(void) {
+    GPIO0DIR |= 0b110;
+    GPIO2DIR |= 0b11110000;
+
+    GPIO0DATA = 0;
+    GPIO2DATA = 0;
+
+    lcd_init_4bit();
+
+    // 2. Print the name on the first line
+    send_string("Ahmed Abu Sabha");
+
+    send_cmd_4bit(0xC0);
+
+    // 4. Print the ID
+    send_string("120220304");
+
+    while(1);
+    return 0;
 }

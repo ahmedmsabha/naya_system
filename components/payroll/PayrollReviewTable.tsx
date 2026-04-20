@@ -42,7 +42,6 @@ export function PayrollReviewTable({
   selectedPeriod,
   selectedHalf,
   periodLabel,
-  periodTotals,
   employees,
   selectedSnapshot,
 }: {
@@ -51,7 +50,6 @@ export function PayrollReviewTable({
   selectedPeriod: string;
   selectedHalf: 'all' | 'p1' | 'p2';
   periodLabel: string;
-  periodTotals: { p1: number; p2: number };
   employees: PayrollEmployee[];
   selectedSnapshot: Record<string, PayrollRecord>;
 }) {
@@ -140,12 +138,10 @@ export function PayrollReviewTable({
     (r) => paidById[r.employee.id],
   ).length;
   const targetCount = rows.length;
-  const totalPayroll =
-    selectedHalf === 'p1'
-      ? periodTotals.p1
-      : selectedHalf === 'p2'
-        ? periodTotals.p2
-        : periodTotals.p1 + periodTotals.p2;
+  const totalPayroll = rows.reduce(
+    (sum, row) => sum + row.dueAmount,
+    0,
+  );
   const paidSoFar = rows.reduce((sum, row) => {
     const isPaid = Boolean(paidById[row.employee.id]);
     if (!isPaid) return sum;

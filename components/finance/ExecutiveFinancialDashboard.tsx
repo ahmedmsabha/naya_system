@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   BarChart3,
@@ -85,12 +85,25 @@ export function ExecutiveFinancialDashboard({
   pnlEntryTable,
 }: ExecutiveFinancialDashboardProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>('performance');
+  const panelScrollAnchorRef = useRef<HTMLDivElement>(null);
+  const skipPanelScrollOnMount = useRef(true);
   const [isBraCollapsed, setIsBraCollapsed] = useState(false);
   const [priceIncreasePct, setPriceIncreasePct] = useState(0);
   const [expenseReductionPct, setExpenseReductionPct] = useState(0);
 
   const topInsights = insights.slice(0, 3);
   const kpiByLabel = useMemo(() => new Map(kpis.map((item) => [item.label, item])), [kpis]);
+
+  useEffect(() => {
+    if (skipPanelScrollOnMount.current) {
+      skipPanelScrollOnMount.current = false;
+      return;
+    }
+    panelScrollAnchorRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, [activeSection]);
 
   const costDistribution = useMemo(() => {
     const foodCost = Math.max(0, kpiByLabel.get('Food Cost %')?.value ?? 0);
@@ -487,7 +500,11 @@ export function ExecutiveFinancialDashboard({
             </div>
           </section>
 
-          <div key={activeSection} className="min-w-0 transition-all duration-300 ease-out">
+          <div
+            ref={panelScrollAnchorRef}
+            key={activeSection}
+            className="min-w-0 scroll-mt-6 transition-all duration-300 ease-out"
+          >
             {renderPanel()}
           </div>
         </div>

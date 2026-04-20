@@ -78,14 +78,6 @@ export default async function PayrollPage({
     }
   }
 
-  const totals = Array.from(selectedSnapshot.values()).reduce(
-    (acc, row) => {
-      acc.p1 += Number(row.salaryP1 || 0);
-      acc.p2 += Number(row.salaryP2 || 0);
-      return acc;
-    },
-    { p1: 0, p2: 0 }
-  );
   const monthLabel = new Date(`${selectedPeriod}-01T12:00:00`).toLocaleDateString("en-US", { month: "long" });
   const halfLabel = selectedHalf === "p1" ? "01-15" : selectedHalf === "p2" ? "16-30" : "Full month";
 
@@ -106,7 +98,6 @@ export default async function PayrollPage({
         selectedPeriod={selectedPeriod}
         selectedHalf={selectedHalf as "all" | "p1" | "p2"}
         periodLabel={`${monthLabel} - ${halfLabel}`}
-        periodTotals={totals}
         employees={employees}
         selectedSnapshot={Object.fromEntries(
           Array.from(selectedSnapshot.entries()).map(([staffId, rec]) => [staffId, { ...rec }])
