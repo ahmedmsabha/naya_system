@@ -12,6 +12,7 @@ export function FinancialsEnhancementBlock() {
     <FinancialsEnhancementPanel
       branchId={ctx.branchId}
       selectedPeriod={ctx.selectedPeriod}
+      grossSales={ctx.grossSales}
       varianceHref={varianceHref}
       vendorsHref={vendorsHref}
       recipes={ctx.recipes}

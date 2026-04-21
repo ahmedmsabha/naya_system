@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { exportInvestorReportPDF } from '@/lib/finance/InvestorReportPDF';
 import { useFinancialsDashboard } from '@/components/finance/financials-dashboard/FinancialsDashboardContext';
 import { formatFinancialCurrency, formatFinancialPct } from '@/components/finance/financials-dashboard/financials-format';
+import { netProfitLossLabel } from '@/lib/domain/money';
 import { monthLabel } from '@/lib/domain/date';
 
 export function InvestorPortalSection() {
@@ -47,7 +48,7 @@ export function InvestorPortalSection() {
       projectedRoi,
       retentionIndex,
       metrics: [
-        { label: 'Current Net Profit', value: formatFinancialCurrency(pnl) },
+        { label: `Current ${netProfitLossLabel(pnl)}`, value: formatFinancialCurrency(pnl) },
         { label: 'Current Net Margin', value: formatFinancialPct(netMarginPct) },
         { label: 'Operating Expenses', value: formatFinancialCurrency(operatingExpenses) },
         { label: 'Total Deductions', value: formatFinancialCurrency(totalDeductions) },

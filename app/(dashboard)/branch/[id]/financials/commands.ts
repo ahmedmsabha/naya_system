@@ -20,7 +20,10 @@ function toFormRecord(formData: FormData): Record<string, string> {
 
 export async function addRevenueEntryAction(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = quickRevenueEntrySchema.safeParse(toFormRecord(formData));
-  if (!parsed.success) return { success: false, error: "Invalid revenue payload." };
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid revenue payload.";
+    return { success: false, error: msg };
+  }
 
   const supabase = await createClient();
   const input = parsed.data;

@@ -2,7 +2,11 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import { ArrowLeft, BarChart3, ChevronRight, Truck, Users, Warehouse } from "lucide-react";
 import { parsePeriod, monthKeyNow, addMonths, monthLabel } from "@/lib/domain/date";
-import { formatCurrency } from "@/lib/domain/money";
+import {
+  formatAccountingCurrency,
+  isNetLoss,
+  netProfitLossLabel,
+} from "@/lib/domain/money";
 import { getBranchHubData } from "./queries";
 
 export default async function BranchDashboard({
@@ -33,7 +37,7 @@ export default async function BranchDashboard({
       subtitle: "Inventory, transfer readiness, and controls",
       icon: Warehouse,
       kpiLabel: "Inventory Value",
-      kpiValue: formatCurrency(data.kpis.warehouseValue),
+      kpiValue: formatAccountingCurrency(data.kpis.warehouseValue),
     },
     {
       id: "financials",
@@ -51,7 +55,7 @@ export default async function BranchDashboard({
       subtitle: "Invoices, payables, and supplier control",
       icon: Truck,
       kpiLabel: "Monthly Spend",
-      kpiValue: formatCurrency(data.kpis.vendorSpend),
+      kpiValue: formatAccountingCurrency(data.kpis.vendorSpend),
     },
     {
       id: "staffing",
@@ -141,8 +145,16 @@ export default async function BranchDashboard({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_16px_42px_-34px_rgba(15,23,42,0.75)]">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Net Profit</p>
-          <p className="mt-2 text-2xl font-black text-emerald-600">{formatCurrency(data.kpis.netProfit)}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+            {netProfitLossLabel(data.kpis.netProfit)}
+          </p>
+          <p
+            className={`mt-2 text-2xl font-black ${
+              isNetLoss(data.kpis.netProfit) ? "text-rose-600" : "text-emerald-600"
+            }`}
+          >
+            {formatAccountingCurrency(data.kpis.netProfit)}
+          </p>
         </div>
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_16px_42px_-34px_rgba(15,23,42,0.75)]">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Current Period</p>

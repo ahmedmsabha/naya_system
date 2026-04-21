@@ -77,6 +77,19 @@ function getAuthorizationMode(): AuthorizationMode {
   return "compat";
 }
 
+/**
+ * Single-tenant / internal-admin mode: skip module + branch-scope permission checks for any
+ * authenticated user. Multi-tenant RBAC ships behind an explicit opt-in.
+ *
+ * - unset or `true` / `1` → bypass RBAC (current product default).
+ * - `false` / `0` → enforce legacy/authz matrix + branch scope.
+ */
+export function isSingleTenantAdminBypass(): boolean {
+  const raw = process.env.AUTH_SINGLE_TENANT_ADMIN?.toLowerCase();
+  if (raw === "false" || raw === "0") return false;
+  return true;
+}
+
 function hasLegacyPermission(role: LegacyRole | null, key: PermissionKey): boolean {
   if (!role) return false;
   const permissionKeys = legacyRolePermissionMatrix[role];
@@ -147,6 +160,10 @@ function authorizeAuthz(actor: CurrentActor, key: PermissionKey, input: Authoriz
 export async function authorize(input: AuthorizeInput): Promise<AuthorizeResult> {
   const actor = await getCurrentActor();
   if (!actor) return { ok: false, actor: null, reason: "Unauthenticated" };
+
+  if (isSingleTenantAdminBypass()) {
+    return { ok: true, actor };
+  }
 
   const key = permissionKey(input.module, input.action);
   const mode = getAuthorizationMode();

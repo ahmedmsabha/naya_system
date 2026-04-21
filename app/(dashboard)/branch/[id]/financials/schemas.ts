@@ -41,7 +41,11 @@ export const quickRevenueEntrySchema = z.object({
   branch_id: entityId,
   period: period,
   sale_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  recipe_id: entityId,
+  recipe_id: z
+    .string()
+    .trim()
+    .min(1, { message: "A valid menu item is required." })
+    .uuid({ message: "A valid menu item is required." }),
   quantity: z.coerce.number().int().positive(),
   unit_price: z.coerce.number().positive(),
   channel: z.enum(["delivery", "dine_in", "takeaway", "manual"]).default("manual"),

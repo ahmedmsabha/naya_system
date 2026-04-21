@@ -11,14 +11,18 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useFinancialsDashboard } from '@/components/finance/financials-dashboard/FinancialsDashboardContext';
 import { formatFinancialCurrency, formatFinancialPct } from '@/components/finance/financials-dashboard/financials-format';
-
-const profitTrendConfig = {
-  netProfit: { label: 'Net Profit', color: '#06b6d4' },
-} satisfies ChartConfig;
+import { isNetLoss } from '@/lib/domain/money';
 
 export function FinancialPerformanceSection() {
   const { grossSales, netTotal, totalDeductions, operatingExpenses, pnl, kpis } =
     useFinancialsDashboard();
+
+  const profitTrendConfig = {
+    netProfit: {
+      label: isNetLoss(pnl) ? 'Net loss' : 'Net profit',
+      color: isNetLoss(pnl) ? '#e11d48' : '#06b6d4',
+    },
+  } satisfies ChartConfig;
 
   const kpiByLabel = useMemo(() => new Map(kpis.map((item) => [item.label, item])), [kpis]);
 
@@ -79,7 +83,7 @@ export function FinancialPerformanceSection() {
       </article>
 
       <article className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-xl font-bold text-[#052e36]">Profit & Loss Trend</h3>
+        <h3 className="text-xl font-bold text-[#052e36]">P&amp;L trend (net result)</h3>
         <div className="mt-6 h-64 rounded-2xl border border-cyan-100 bg-slate-50 p-3">
           <ChartContainer config={profitTrendConfig} className="h-full w-full">
             <AreaChart data={trendPoints} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -99,8 +103,8 @@ export function FinancialPerformanceSection() {
                 dataKey="netProfit"
                 stroke="var(--color-netProfit)"
                 strokeWidth={2.5}
-                fill="#67e8f9"
-                fillOpacity={0.35}
+                fill={isNetLoss(pnl) ? '#fecdd3' : '#67e8f9'}
+                fillOpacity={0.45}
                 isAnimationActive={false}
               />
             </AreaChart>

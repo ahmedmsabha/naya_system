@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useFinancialsDashboard } from '@/components/finance/financials-dashboard/FinancialsDashboardContext';
 import { formatFinancialCurrency } from '@/components/finance/financials-dashboard/financials-format';
+import { isNetLoss, netProfitLossLabel } from '@/lib/domain/money';
 
 export function RevenueUnitSection() {
   const {
@@ -43,8 +44,12 @@ export function RevenueUnitSection() {
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs text-slate-500">Net Profit (EBITDA)</p>
-            <p className="mt-2 text-2xl font-black text-emerald-700">
+            <p className="text-xs text-slate-500">
+              {netProfitLossLabel(pnl)} (EBITDA)
+            </p>
+            <p
+              className={`mt-2 text-2xl font-black ${isNetLoss(pnl) ? 'text-rose-700' : 'text-emerald-700'}`}
+            >
               {formatFinancialCurrency(pnl)}
             </p>
           </div>

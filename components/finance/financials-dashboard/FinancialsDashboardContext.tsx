@@ -8,17 +8,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { FinancialsDashboardData } from '@/app/(dashboard)/branch/[id]/financials/queries';
-import type { MonthlyPnLDeductionCategory, MonthlyPnLExpenseCategory } from '@/lib/finance/monthly-pnl';
+import type {
+  FinancialExpenseRow,
+  FinancialsDashboardData,
+} from '@/app/(dashboard)/branch/[id]/financials/queries';
+import { ebitdaRowLabel } from '@/lib/domain/money';
+import type { MonthlyPnLDeductionCategory } from '@/lib/finance/monthly-pnl';
 
-type ExpenseRow = {
-  category: MonthlyPnLExpenseCategory;
-  amount: number;
-  receiptUrl: string | null;
-  readOnly: boolean;
-  helperLinkHref?: string;
-  helperLinkLabel?: string;
-};
+type ExpenseRow = FinancialExpenseRow;
 
 type DeductionValues = Record<MonthlyPnLDeductionCategory, number>;
 
@@ -32,7 +29,7 @@ function sessionKey(branchId: string, period: string): string {
   return `${branchId}::${period}`;
 }
 
-type MatrixStatus = 'ON TARGET' | 'CRITICAL INCREASE' | 'UNDER BUDGET';
+type MatrixStatus = 'ON TARGET' | 'CRITICAL INCREASE' | 'UNDER BUDGET' | 'NET LOSS';
 type MatrixTone = 'emerald' | 'rose' | 'amber';
 
 export type FinancialMatrixRow = {
@@ -176,15 +173,17 @@ export function FinancialsDashboardProvider({
         status: badgeMeta(percentage(operations, grossSales), 20),
       },
       {
-        label: 'EBITDA',
+        label: ebitdaRowLabel(pnl),
         amount: pnl,
         pct: percentage(pnl, grossSales),
         status:
-          pnl >= grossSales * 0.15
-            ? { label: 'ON TARGET', tone: 'emerald' }
-            : pnl >= grossSales * 0.1
-              ? { label: 'UNDER BUDGET', tone: 'amber' }
-              : { label: 'CRITICAL INCREASE', tone: 'rose' },
+          pnl < 0
+            ? { label: 'NET LOSS', tone: 'rose' }
+            : pnl >= grossSales * 0.15
+              ? { label: 'ON TARGET', tone: 'emerald' }
+              : pnl >= grossSales * 0.1
+                ? { label: 'UNDER BUDGET', tone: 'amber' }
+                : { label: 'CRITICAL INCREASE', tone: 'rose' },
       },
     ];
 

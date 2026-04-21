@@ -13,6 +13,7 @@ import {
 } from '@/components/finance/financials-dashboard/financials-sections';
 import { useFinancialsDashboard } from '@/components/finance/financials-dashboard/FinancialsDashboardContext';
 import { formatFinancialCurrency, formatFinancialPct } from '@/components/finance/financials-dashboard/financials-format';
+import { isNetLoss, netProfitLossLabel } from '@/lib/domain/money';
 
 function parseSectionFromPath(pathname: string): FinancialsSectionId {
   const m = pathname.match(/\/financials\/([^/]+)/);
@@ -113,14 +114,20 @@ export function FinancialsLayoutShell({ children }: { children: React.ReactNode 
               </p>
             </article>
             <article className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-              <p className="text-xs text-slate-500">Net Profit</p>
-              <p className="mt-2 text-4xl font-black text-emerald-700">
+              <p className="text-xs text-slate-500">{netProfitLossLabel(pnl)}</p>
+              <p
+                className={`mt-2 text-4xl font-black ${isNetLoss(pnl) ? 'text-rose-700' : 'text-emerald-700'}`}
+              >
                 {formatFinancialCurrency(pnl)}
               </p>
             </article>
             <article className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
               <p className="text-xs text-slate-500">Net Margin</p>
-              <p className="mt-2 text-4xl font-black text-[#052e36]">
+              <p
+                className={`mt-2 text-4xl font-black ${
+                  isNetLoss(pnl) ? 'text-rose-700' : 'text-[#052e36]'
+                }`}
+              >
                 {formatFinancialPct(kpis[0]?.value ?? 0)}
               </p>
             </article>

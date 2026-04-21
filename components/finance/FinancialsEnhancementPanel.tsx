@@ -1,17 +1,18 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { Loader2, PlusCircle, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Loader2, PlusCircle, TrendingUp, Wrench } from 'lucide-react';
 import Link from 'next/link';
-import { formatCurrency } from '@/lib/domain/money';
+import { formatAccountingCurrency, formatCurrency, isNetLoss } from '@/lib/domain/money';
 import type { MonthlyPnLCategory } from '@/lib/finance/monthly-pnl';
 import { MONTHLY_PNL_ALL_CATEGORIES } from '@/lib/finance/monthly-pnl';
 import { addExpenseEntryAction, addRevenueEntryAction } from '@/app/(dashboard)/branch/[id]/financials/commands';
+import { generateDummyFinancialDataForm } from '@/app/(dashboard)/branch/[id]/financials/seed-actions';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
-type MatrixStatus = 'ON TARGET' | 'CRITICAL INCREASE' | 'UNDER BUDGET';
+type MatrixStatus = 'ON TARGET' | 'CRITICAL INCREASE' | 'UNDER BUDGET' | 'NET LOSS';
 type MatrixTone = 'emerald' | 'rose' | 'amber';
 
 type MatrixRow = {
@@ -27,6 +28,7 @@ type MatrixRow = {
 type FinancialsEnhancementPanelProps = {
   branchId: string;
   selectedPeriod: string;
+  grossSales: number;
   varianceHref: string;
   vendorsHref: string;
   recipes: Array<{ id: string; name: string; sellingPrice: number }>;
@@ -62,6 +64,20 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
+function DevSeedSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+    >
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4 text-slate-500" />}
+      {pending ? 'Working…' : 'Generate sample financial data'}
+    </button>
+  );
+}
+
 function toneClasses(tone: MatrixTone): string {
   if (tone === 'emerald') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (tone === 'rose') return 'bg-rose-50 text-rose-700 border-rose-200';
@@ -71,6 +87,7 @@ function toneClasses(tone: MatrixTone): string {
 export function FinancialsEnhancementPanel({
   branchId,
   selectedPeriod,
+  grossSales,
   varianceHref,
   vendorsHref,
   recipes,
@@ -81,12 +98,32 @@ export function FinancialsEnhancementPanel({
   matrixRows,
   baseline,
 }: FinancialsEnhancementPanelProps) {
-  const [selectedRecipeId, setSelectedRecipeId] = useState(recipes[0]?.id ?? '');
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string>(() => recipes[0]?.id ?? '');
   const [selectedCategory, setSelectedCategory] = useState<MonthlyPnLCategory>(MONTHLY_PNL_ALL_CATEGORIES[0]);
-  const [unitPrice, setUnitPrice] = useState<string>(String(recipes[0]?.sellingPrice ?? 0));
+  const [unitPrice, setUnitPrice] = useState<string>(() =>
+    recipes[0] != null ? String(recipes[0].sellingPrice) : '0',
+  );
 
   const [revenueState, revenueAction] = useActionState(addRevenueEntryAction, { success: false });
   const [expenseState, expenseAction] = useActionState(addExpenseEntryAction, { success: false });
+  const [seedState, seedAction] = useActionState(generateDummyFinancialDataForm, undefined);
+
+  const showDeveloperTools = recipes.length === 0 || grossSales === 0;
+  const canAddRevenue = recipes.length > 0;
+
+  useEffect(() => {
+    if (recipes.length === 0) return;
+    setSelectedRecipeId((prev) => {
+      if (prev && recipes.some((r) => r.id === prev)) return prev;
+      return recipes[0].id;
+    });
+  }, [recipes]);
+
+  useEffect(() => {
+    if (recipes.length === 0) return;
+    const match = recipes.find((r) => r.id === selectedRecipeId);
+    if (match) setUnitPrice(String(match.sellingPrice));
+  }, [recipes, selectedRecipeId]);
 
   return (
     <section className="space-y-6">
@@ -94,63 +131,77 @@ export function FinancialsEnhancementPanel({
         <aside className="space-y-4">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.5)]">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Add Revenue</p>
-            <form action={revenueAction} className="mt-3 space-y-3">
-              <input type="hidden" name="branch_id" value={branchId} />
-              <input type="hidden" name="period" value={selectedPeriod} />
-              <input type="hidden" name="recipe_id" value={selectedRecipeId} />
-              <select
-                value={selectedRecipeId}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setSelectedRecipeId(next);
-                  const recipe = recipes.find((r) => r.id === next);
-                  if (recipe) setUnitPrice(String(recipe.sellingPrice));
-                }}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+            {!canAddRevenue ? (
+              <div
+                className="mt-3 flex gap-3 rounded-2xl border border-amber-200/90 bg-amber-50 px-3.5 py-3 text-sm font-semibold leading-snug text-amber-950"
+                role="status"
               >
-                {recipes.map((recipe) => (
-                  <option key={recipe.id} value={recipe.id}>
-                    {recipe.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="date"
-                name="sale_date"
-                defaultValue={`${selectedPeriod}-01`}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
-              />
-              <input
-                name="quantity"
-                type="number"
-                min={1}
-                defaultValue={1}
-                inputMode="numeric"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
-              />
-              <input
-                name="unit_price"
-                type="number"
-                min={0}
-                step="0.01"
-                value={unitPrice}
-                onChange={(event) => setUnitPrice(event.target.value)}
-                inputMode="decimal"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
-              />
-              <select
-                name="channel"
-                defaultValue="manual"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+                <span>No menu items found. Please add Recipes/Menu Items to generate revenue.</span>
+              </div>
+            ) : null}
+            <form action={revenueAction} className="mt-3">
+              <fieldset
+                disabled={!canAddRevenue}
+                className="min-w-0 space-y-3 border-0 p-0 disabled:pointer-events-none disabled:opacity-55"
               >
-                <option value="delivery">Delivery</option>
-                <option value="dine_in">Dine-In</option>
-                <option value="takeaway">Takeaway</option>
-                <option value="manual">Manual</option>
-              </select>
-              <SubmitButton label="Add Revenue" />
-              {revenueState.error ? <p className="text-xs font-semibold text-rose-600">{revenueState.error}</p> : null}
-              {revenueState.success ? <p className="text-xs font-semibold text-emerald-600">{revenueState.message}</p> : null}
+                <input type="hidden" name="branch_id" value={branchId} />
+                <input type="hidden" name="period" value={selectedPeriod} />
+                <input type="hidden" name="recipe_id" value={selectedRecipeId} />
+                <select
+                  value={selectedRecipeId}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setSelectedRecipeId(next);
+                    const recipe = recipes.find((r) => r.id === next);
+                    if (recipe) setUnitPrice(String(recipe.sellingPrice));
+                  }}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  {recipes.map((recipe) => (
+                    <option key={recipe.id} value={recipe.id}>
+                      {recipe.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  name="sale_date"
+                  defaultValue={`${selectedPeriod}-01`}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+                />
+                <input
+                  name="quantity"
+                  type="number"
+                  min={1}
+                  defaultValue={1}
+                  inputMode="numeric"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+                />
+                <input
+                  name="unit_price"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={unitPrice}
+                  onChange={(event) => setUnitPrice(event.target.value)}
+                  inputMode="decimal"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+                />
+                <select
+                  name="channel"
+                  defaultValue="manual"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  <option value="delivery">Delivery</option>
+                  <option value="dine_in">Dine-In</option>
+                  <option value="takeaway">Takeaway</option>
+                  <option value="manual">Manual</option>
+                </select>
+                <SubmitButton label="Add Revenue" />
+              </fieldset>
+              {revenueState.error ? <p className="mt-3 text-xs font-semibold text-rose-600">{revenueState.error}</p> : null}
+              {revenueState.success ? <p className="mt-3 text-xs font-semibold text-emerald-600">{revenueState.message}</p> : null}
             </form>
           </div>
 
@@ -185,6 +236,26 @@ export function FinancialsEnhancementPanel({
               {expenseState.success ? <p className="text-xs font-semibold text-emerald-600">{expenseState.message}</p> : null}
             </form>
           </div>
+
+          {showDeveloperTools ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50/80 p-5 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.35)]">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Developer tools</p>
+              <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-600">
+                No menu or sales in view? Generate sample recipes from warehouse ingredients and random sales for this month to exercise charts and P&amp;L.
+              </p>
+              <form action={seedAction} className="mt-3 space-y-2">
+                <input type="hidden" name="branch_id" value={branchId} />
+                <input type="hidden" name="period" value={selectedPeriod} />
+                <DevSeedSubmitButton />
+                {seedState?.success === false ? (
+                  <p className="text-xs font-semibold text-rose-600">{seedState.error}</p>
+                ) : null}
+                {seedState?.success ? (
+                  <p className="text-xs font-semibold text-emerald-600">{seedState.message}</p>
+                ) : null}
+              </form>
+            </div>
+          ) : null}
         </aside>
 
         <div className="space-y-6">
@@ -262,7 +333,17 @@ export function FinancialsEnhancementPanel({
                   {matrixRows.map((row) => (
                     <tr key={row.label} className="border-t border-slate-100 bg-white">
                       <td className="px-4 py-3 text-sm font-black text-slate-800">{row.label}</td>
-                      <td className="px-4 py-3 text-right text-sm font-black text-slate-900">{formatCurrency(row.amount)}</td>
+                      <td
+                        className={`px-4 py-3 text-right text-sm font-black ${
+                          row.label.includes('(EBITDA)')
+                            ? isNetLoss(row.amount)
+                              ? 'text-rose-700'
+                              : 'text-emerald-700'
+                            : 'text-slate-900'
+                        }`}
+                      >
+                        {formatAccountingCurrency(row.amount)}
+                      </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-slate-700">{row.pct.toFixed(1)}%</td>
                       <td className="px-4 py-3 text-right">
                         <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] ${toneClasses(row.status.tone)}`}>
@@ -276,7 +357,17 @@ export function FinancialsEnhancementPanel({
             </div>
 
             <p className="mt-3 text-xs font-semibold text-slate-500">
-              Baseline snapshot: Net Sales {formatCurrency(baseline.netSales)} | COGS {formatCurrency(baseline.cogs)} | Operations {formatCurrency(baseline.operationsCost)} | EBITDA {formatCurrency(baseline.ebitda)}
+              Baseline snapshot: Net Sales {formatAccountingCurrency(baseline.netSales)} | COGS{' '}
+              {formatAccountingCurrency(baseline.cogs)} | Operations {formatAccountingCurrency(baseline.operationsCost)} |{' '}
+              {isNetLoss(baseline.ebitda) ? (
+                <>
+                  <span className="text-rose-700">Net loss (EBITDA) {formatAccountingCurrency(baseline.ebitda)}</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-emerald-700">Net profit (EBITDA) {formatAccountingCurrency(baseline.ebitda)}</span>
+                </>
+              )}
             </p>
           </section>
         </div>
