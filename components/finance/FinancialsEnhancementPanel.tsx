@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, Loader2, PlusCircle, TrendingUp, Wrench } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { formatAccountingCurrency, formatCurrency, isNetLoss } from '@/lib/domain/money';
 import type { MonthlyPnLCategory } from '@/lib/finance/monthly-pnl';
 import { MONTHLY_PNL_ALL_CATEGORIES } from '@/lib/finance/monthly-pnl';
@@ -98,6 +99,7 @@ export function FinancialsEnhancementPanel({
   matrixRows,
   baseline,
 }: FinancialsEnhancementPanelProps) {
+  const router = useRouter();
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>(() => recipes[0]?.id ?? '');
   const [selectedCategory, setSelectedCategory] = useState<MonthlyPnLCategory>(MONTHLY_PNL_ALL_CATEGORIES[0]);
   const [unitPrice, setUnitPrice] = useState<string>(() =>
@@ -110,6 +112,12 @@ export function FinancialsEnhancementPanel({
 
   const showDeveloperTools = recipes.length === 0 || grossSales === 0;
   const canAddRevenue = recipes.length > 0;
+
+  useEffect(() => {
+    if (revenueState.success || expenseState.success || seedState?.success) {
+      router.refresh();
+    }
+  }, [expenseState.success, revenueState.success, router, seedState?.success]);
 
   useEffect(() => {
     if (recipes.length === 0) return;
