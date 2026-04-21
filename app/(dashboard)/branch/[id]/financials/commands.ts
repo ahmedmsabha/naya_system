@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { authorize } from "@/lib/auth/authorize";
 import { quickExpenseEntrySchema, quickRevenueEntrySchema } from "./schemas";
 
 type FormState = {
@@ -27,6 +28,8 @@ export async function addRevenueEntryAction(_: FormState, formData: FormData): P
 
   const supabase = await createClient();
   const input = parsed.data;
+  const access = await authorize({ module: "financials", action: "edit", branchId: input.branch_id });
+  if (!access.ok) return { success: false, error: access.reason ?? "Unauthorized" };
   const { error } = await supabase.from("sales").insert({
     branch_id: input.branch_id,
     recipe_id: input.recipe_id,
@@ -48,6 +51,8 @@ export async function addExpenseEntryAction(_: FormState, formData: FormData): P
 
   const supabase = await createClient();
   const input = parsed.data;
+  const access = await authorize({ module: "financials", action: "edit", branchId: input.branch_id });
+  if (!access.ok) return { success: false, error: access.reason ?? "Unauthorized" };
 
   const { data: existing, error: fetchError } = await supabase
     .from("branch_monthly_expenses")

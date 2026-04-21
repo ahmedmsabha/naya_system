@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, monthLabel } from '@/lib/domain/date';
 import {
   branchFinancialsSectionHref,
@@ -75,6 +75,13 @@ export function FinancialsLayoutShell({ children }: { children: React.ReactNode 
         <div className="min-w-0 flex-1 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
+              <Link
+                href={`/branch/${branchId}`}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Branch
+              </Link>
               <div className="h-11 w-11 rounded-full bg-cyan-100" />
               <div>
                 <p className="text-xs text-slate-500">Branch Financial Dashboard</p>

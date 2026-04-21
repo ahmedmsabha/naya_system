@@ -73,7 +73,16 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user && !isAuthPage) {
+  const isServerAction =
+    request.method === 'POST' &&
+    (request.headers.has('next-action') ||
+      request.headers.has('x-action') ||
+      request.headers.get('content-type')?.includes('multipart/form-data') === true)
+
+  // For Server Actions, a redirect response breaks the action protocol and surfaces in the UI as:
+  // "An unexpected response was received from the server."
+  // Let the request continue so the action can return a typed error payload instead.
+  if (!user && !isAuthPage && !isServerAction) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
