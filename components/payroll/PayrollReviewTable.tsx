@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CalendarDays,
@@ -66,6 +66,13 @@ export function PayrollReviewTable({
     Record<string, string>
   >({});
 
+  const [uiHalf, setUiHalf] =
+    useState<'all' | 'p1' | 'p2'>(selectedHalf);
+
+  useEffect(() => {
+    setUiHalf(selectedHalf);
+  }, [selectedHalf]);
+
   const periodDate = useMemo(
     () => new Date(`${selectedPeriod}-01T12:00:00`),
     [selectedPeriod],
@@ -79,15 +86,18 @@ export function PayrollReviewTable({
   );
 
   const changePeriod = (next: string) => {
+    setAmountById({});
     startNavigationTransition(() => {
       router.push(
-        `/branch/${branchId}/payroll?period=${next}&half=${selectedHalf}`,
+        `/branch/${branchId}/payroll?period=${next}&half=${uiHalf}`,
       );
     });
   };
 
   const onSelectHalf = (half: 'all' | 'p1' | 'p2') => {
-    if (half === selectedHalf) return;
+    if (half === uiHalf) return;
+    setUiHalf(half);
+    setAmountById({});
     startNavigationTransition(() => {
       router.push(
         `/branch/${branchId}/payroll?period=${selectedPeriod}&half=${half}`,
@@ -102,9 +112,9 @@ export function PayrollReviewTable({
         const rec =
           selectedSnapshot[employee.id] ?? fallbackRecord();
         const dueAmount =
-          selectedHalf === 'p1'
+          uiHalf === 'p1'
             ? rec.salaryP1
-            : selectedHalf === 'p2'
+            : uiHalf === 'p2'
               ? rec.salaryP2
               : rec.salaryP1 + rec.salaryP2;
         return { employee, rec, dueAmount };
@@ -129,7 +139,7 @@ export function PayrollReviewTable({
     employees,
     paidById,
     q,
-    selectedHalf,
+    uiHalf,
     selectedSnapshot,
     showUnpaidOnly,
   ]);
@@ -296,7 +306,7 @@ export function PayrollReviewTable({
               disabled={isNavigationPending}
               onClick={() => onSelectHalf('all')}
               className={`rounded-xl px-4 py-2 text-sm font-black ${
-                selectedHalf === 'all'
+                uiHalf === 'all'
                   ? 'bg-[#eef2ff] text-[#4338ca]'
                   : 'bg-[#f3f4f6] text-gray-500'
               } disabled:opacity-60`}
@@ -308,7 +318,7 @@ export function PayrollReviewTable({
               disabled={isNavigationPending}
               onClick={() => onSelectHalf('p1')}
               className={`rounded-xl px-4 py-2 text-sm font-black ${
-                selectedHalf === 'p1'
+                uiHalf === 'p1'
                   ? 'bg-[#eef2ff] text-[#4338ca]'
                   : 'bg-[#f3f4f6] text-gray-500'
               } disabled:opacity-60`}
@@ -320,7 +330,7 @@ export function PayrollReviewTable({
               disabled={isNavigationPending}
               onClick={() => onSelectHalf('p2')}
               className={`rounded-xl px-4 py-2 text-sm font-black ${
-                selectedHalf === 'p2'
+                uiHalf === 'p2'
                   ? 'bg-[#eef2ff] text-[#4338ca]'
                   : 'bg-[#f3f4f6] text-gray-500'
               } disabled:opacity-60`}
@@ -378,7 +388,8 @@ export function PayrollReviewTable({
                   paidById[employee.id],
                 );
                 const inputValue =
-                  amountById[employee.id] ?? '0.00';
+                  amountById[employee.id] ??
+                  dueAmount.toFixed(2);
                 const avatarLetter =
                   employee.full_name
                     ?.trim()
