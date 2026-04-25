@@ -2,6 +2,35 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveTenantContextFromPath } from '@/lib/auth/tenant-context'
 
+/**
+ * Global / administration surfaces (not tied to a single branch in the URL).
+ * Non–super-admins are redirected to their assigned branch dashboard.
+ * Must match `lib/auth/authorize` expectations for `super_admin` vs branch roles.
+ */
+const GLOBAL_ADMIN_PATH_PREFIXES = ['/investor', '/accountant', '/settings'] as const
+
+function isGlobalOrAdminPath(pathname: string): boolean {
+  if (pathname === '/') {
+    return true
+  }
+  for (const prefix of GLOBAL_ADMIN_PATH_PREFIXES) {
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+      return true
+    }
+  }
+  return false
+}
+
+function redirectWithSessionCookies(
+  from: NextResponse,
+  to: NextResponse
+): NextResponse {
+  from.cookies.getAll().forEach((cookie) => {
+    to.cookies.set(cookie.name, cookie.value)
+  })
+  return to
+}
+
 function withContextHeaders(request: NextRequest, response: NextResponse) {
   const requestHeaders = new Headers(request.headers)
   const { branchId, warehouseId } = resolveTenantContextFromPath(request.nextUrl.pathname)
@@ -92,6 +121,30 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)
+  }
+
+  if (user && !isServerAction) {
+    const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
+    const role = typeof metadata.role === 'string' ? metadata.role : ''
+    const branchId = typeof metadata.branch_id === 'string' ? metadata.branch_id.trim() : null
+
+    if (role !== 'super_admin' && isGlobalOrAdminPath(pathname)) {
+      if (!branchId) {
+        const dest = request.nextUrl.clone()
+        dest.pathname = '/login'
+        dest.searchParams.set('error', 'Invalid Account Setup')
+        return redirectWithSessionCookies(
+          supabaseResponse,
+          NextResponse.redirect(dest)
+        )
+      }
+      const dest = request.nextUrl.clone()
+      dest.pathname = `/branch/${branchId}`
+      return redirectWithSessionCookies(
+        supabaseResponse,
+        NextResponse.redirect(dest)
+      )
+    }
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

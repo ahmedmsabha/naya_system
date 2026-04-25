@@ -1,88 +1,52 @@
 import "server-only";
 
-import { getCurrentActor, type CurrentActor, type LegacyRole } from "@/lib/auth/actor";
-import {
-  permissionKey,
-  type PermissionAction,
-  type PermissionKey,
-  type PermissionModule,
-} from "@/lib/auth/permissions";
+import { createClient } from "@/lib/supabase/server";
+import type { PermissionAction, PermissionModule } from "@/lib/auth/permissions";
 
-type AuthorizationMode = "legacy" | "compat" | "authz";
+/**
+ * Module access for RBAC checks (aligns with `PermissionModule` in `permissions.ts`).
+ */
+export type AuthModule = PermissionModule;
+export type AuthAction = PermissionAction;
 
-type AuthorizeInput = {
-  module: PermissionModule;
-  action: PermissionAction;
+export type RbacUserContext = {
+  userId: string;
+  email: string | null;
+  role: string;
+  branchId: string | null;
+};
+
+export type AuthorizeInput = {
+  module: AuthModule;
+  action: AuthAction;
   branchId?: string | null;
+  /** Reserved for future scope checks; not used in the current JWT + branch matrix. */
   warehouseId?: string | null;
   throwOnFail?: boolean;
 };
 
-type AuthorizeResult = {
-  ok: boolean;
-  actor: CurrentActor | null;
-  reason?: string;
-};
+export type AuthorizeResult =
+  | { ok: true; actor: RbacUserContext }
+  | { ok: false; reason: string; actor: RbacUserContext | null };
 
-const legacyRolePermissionMatrix: Record<string, PermissionKey[]> = {
-  super_admin: [
-    "dashboard.read",
-    "dashboard.edit",
-    "warehouse.read",
-    "warehouse.edit",
-    "vendors.read",
-    "vendors.edit",
-    "financials.read",
-    "financials.edit",
-    "staffing.read",
-    "staffing.edit",
-    "payroll.read",
-    "payroll.edit",
-    "alerts.read",
-    "alerts.edit",
-    "settings.read",
-    "settings.edit",
-  ],
-  warehouse_manager: [
-    "dashboard.read",
-    "warehouse.read",
-    "warehouse.edit",
-    "vendors.read",
-    "vendors.edit",
-    "alerts.read",
-  ],
-  branch_staff: [
-    "dashboard.read",
-    "warehouse.read",
-    "warehouse.edit",
-    "vendors.read",
-    "staffing.read",
-    "alerts.read",
-  ],
-  viewer: [
-    "dashboard.read",
-    "warehouse.read",
-    "vendors.read",
-    "financials.read",
-    "staffing.read",
-    "payroll.read",
-    "alerts.read",
-    "settings.read",
-  ],
-};
+const BRANCH_MANAGER_MODULES: ReadonlySet<AuthModule> = new Set([
+  "dashboard",
+  "warehouse",
+  "financials",
+  "staffing",
+  "payroll",
+  "vendors",
+]);
 
-function getAuthorizationMode(): AuthorizationMode {
-  const value = process.env.AUTHZ_MODE?.toLowerCase();
-  if (value === "legacy" || value === "authz") return value;
-  return "compat";
-}
+const BRANCH_STAFF_MODULES: ReadonlySet<AuthModule> = new Set(["warehouse", "financials"]);
+
+const WAREHOUSE_MANAGER_MODULES: ReadonlySet<AuthModule> = new Set(["warehouse", "vendors"]);
 
 /**
- * Single-tenant / internal-admin mode: skip module + branch-scope permission checks for any
- * authenticated user. Multi-tenant RBAC ships behind an explicit opt-in.
- *
- * - unset or `true` / `1` → bypass RBAC (current product default).
- * - `false` / `0` → enforce legacy/authz matrix + branch scope.
+ * When `true`, branch layout helpers may redirect unknown `branch_id` in the URL to the first DB branch
+ * (dev / single-tenant convenience). It does not bypass `authorize()` for mutations.
+ * - `false` / `0` → do not use that redirect fallback.
+ * - unset or any other value → allow fallback.
  */
 export function isSingleTenantAdminBypass(): boolean {
   const raw = process.env.AUTH_SINGLE_TENANT_ADMIN?.toLowerCase();
@@ -90,105 +54,94 @@ export function isSingleTenantAdminBypass(): boolean {
   return true;
 }
 
-function hasLegacyPermission(role: LegacyRole | null, key: PermissionKey): boolean {
-  if (!role) return false;
-  const permissionKeys = legacyRolePermissionMatrix[role];
-  if (!permissionKeys) return false;
-  return permissionKeys.includes(key);
+function normalizeUuidString(value: string | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  return value.trim();
 }
 
-function checkBranchScope(actor: CurrentActor, branchId?: string | null): boolean {
-  if (!branchId || actor.isSuperAdmin) return true;
-
-  if (actor.branchScopeIds.length > 0) {
-    return actor.branchScopeIds.includes(branchId);
-  }
-
-  if (actor.legacyBranchId) {
-    return actor.legacyBranchId === branchId;
-  }
-
-  return true;
+function readUserMetadata(user: {
+  user_metadata?: Record<string, unknown> | null;
+}): { role: string; branchId: string | null } {
+  const meta = user.user_metadata ?? {};
+  const role = typeof meta.role === "string" ? meta.role : "";
+  const branchId = normalizeUuidString(
+    typeof meta.branch_id === "string" ? meta.branch_id : null
+  );
+  return { role, branchId };
 }
 
-function checkWarehouseScope(actor: CurrentActor, warehouseId?: string | null): boolean {
-  if (!warehouseId || actor.isSuperAdmin) return true;
-  if (actor.warehouseScopeIds.length === 0) return true;
-  return actor.warehouseScopeIds.includes(warehouseId);
+function moduleAllowedForRole(role: string, module: AuthModule): boolean {
+  switch (role) {
+    case "branch_manager":
+      return BRANCH_MANAGER_MODULES.has(module);
+    case "branch_staff":
+      return BRANCH_STAFF_MODULES.has(module);
+    case "warehouse_manager":
+      return WAREHOUSE_MANAGER_MODULES.has(module);
+    default:
+      return false;
+  }
 }
 
-function authorizeLegacy(actor: CurrentActor, key: PermissionKey, input: AuthorizeInput): AuthorizeResult {
-  if (!hasLegacyPermission(actor.legacyRole, key)) {
-    return { ok: false, actor, reason: `Missing permission: ${key}` };
-  }
-
-  if (!checkBranchScope(actor, input.branchId)) {
-    return { ok: false, actor, reason: "Branch scope denied" };
-  }
-
-  if (!checkWarehouseScope(actor, input.warehouseId)) {
-    return { ok: false, actor, reason: "Warehouse scope denied" };
-  }
-
-  return { ok: true, actor };
-}
-
-function authorizeAuthz(actor: CurrentActor, key: PermissionKey, input: AuthorizeInput): AuthorizeResult {
-  if (!actor.authzAvailable) {
-    return { ok: false, actor, reason: "AuthZ tables are not available yet" };
-  }
-
-  if (!actor.hasAuthzData && !actor.isSuperAdmin) {
-    return { ok: false, actor, reason: "No AuthZ assignments found for user" };
-  }
-
-  if (!actor.isSuperAdmin && !actor.permissionKeys.includes(key)) {
-    return { ok: false, actor, reason: `Missing permission: ${key}` };
-  }
-
-  if (!checkBranchScope(actor, input.branchId)) {
-    return { ok: false, actor, reason: "Branch scope denied" };
-  }
-
-  if (!checkWarehouseScope(actor, input.warehouseId)) {
-    return { ok: false, actor, reason: "Warehouse scope denied" };
-  }
-
-  return { ok: true, actor };
-}
-
+/**
+ * Server-side authorization using Supabase Auth session and `user_metadata.role` /
+ * `user_metadata.branch_id` (must match RLS expectations).
+ */
 export async function authorize(input: AuthorizeInput): Promise<AuthorizeResult> {
-  const actor = await getCurrentActor();
-  if (!actor) return { ok: false, actor: null, reason: "Unauthenticated" };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (isSingleTenantAdminBypass()) {
+  if (!user) {
+    const failed: AuthorizeResult = { ok: false, reason: "Unauthenticated", actor: null };
+    if (input.throwOnFail) throw new Error(failed.reason);
+    return failed;
+  }
+
+  const { role, branchId: tokenBranchId } = readUserMetadata(user);
+  const actor: RbacUserContext = {
+    userId: user.id,
+    email: user.email ?? null,
+    role,
+    branchId: tokenBranchId,
+  };
+
+  if (role === "super_admin") {
     return { ok: true, actor };
   }
 
-  const key = permissionKey(input.module, input.action);
-  const mode = getAuthorizationMode();
+  const requestedBranch = normalizeUuidString(
+    input.branchId === undefined || input.branchId === null
+      ? null
+      : String(input.branchId)
+  );
 
-  const result =
-    mode === "legacy"
-      ? authorizeLegacy(actor, key, input)
-      : mode === "authz"
-        ? authorizeAuthz(actor, key, input)
-        : actor.authzAvailable && actor.hasAuthzData
-          ? authorizeAuthz(actor, key, input)
-          : authorizeLegacy(actor, key, input);
-
-  if (!result.ok && input.throwOnFail) {
-    throw new Error(result.reason ?? "Unauthorized");
+  if (requestedBranch !== null) {
+    if (!tokenBranchId || requestedBranch !== tokenBranchId) {
+      const failed: AuthorizeResult = { ok: false, reason: "Branch mismatch", actor };
+      if (input.throwOnFail) throw new Error(failed.reason);
+      return failed;
+    }
   }
 
-  return result;
+  if (!moduleAllowedForRole(role, input.module)) {
+    const failed: AuthorizeResult = {
+      ok: false,
+      reason: "Insufficient permissions for this module",
+      actor,
+    };
+    if (input.throwOnFail) throw new Error(failed.reason);
+    return failed;
+  }
+
+  return { ok: true, actor };
 }
 
-export async function assertAuthorized(input: AuthorizeInput): Promise<CurrentActor> {
+export async function assertAuthorized(input: AuthorizeInput): Promise<RbacUserContext> {
   const result = await authorize({ ...input, throwOnFail: false });
-  if (!result.ok || !result.actor) {
-    throw new Error(result.reason ?? "Unauthorized");
+  if (result.ok) {
+    return result.actor;
   }
-  return result.actor;
+  throw new Error(result.reason);
 }
-

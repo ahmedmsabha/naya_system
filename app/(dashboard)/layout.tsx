@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopHeader } from "@/components/layout/TopHeader";
 import { TarekFloatingButton } from "@/components/finance/TarekFloatingButton";
 import { getCurrentActor } from "@/lib/auth/actor";
+import { getCachedDashboardNav } from "@/lib/navigation/dashboard-nav";
 import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({
@@ -13,6 +14,7 @@ export default async function DashboardLayout({
   if (!actor) {
     redirect("/login");
   }
+  const navItems = await getCachedDashboardNav();
   return (
     <div className="flex h-full min-h-screen w-full overflow-x-hidden overflow-y-hidden print:block print:overflow-visible">
       <div className="print:hidden">
@@ -20,7 +22,7 @@ export default async function DashboardLayout({
       </div>
       <div className="flex-1 flex flex-col h-full overflow-x-hidden overflow-y-hidden relative print:block print:overflow-visible">
         <div className="print:hidden">
-          <TopHeader />
+          <TopHeader items={navItems} />
         </div>
         <main className="flex-1 overflow-y-auto overflow-x-hidden w-full relative bg-white print:overflow-visible print:bg-white">
           <div className="min-h-full p-4 md:p-8 max-w-7xl mx-auto print:p-0 print:max-w-none">
@@ -30,7 +32,7 @@ export default async function DashboardLayout({
       </div>
 
       {/* Global AI Accountant Access */}
-      <TarekFloatingButton />
+      <TarekFloatingButton canUseAccountant={actor.isSuperAdmin} />
     </div>
   );
 }

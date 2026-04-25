@@ -4,7 +4,16 @@ import { Wallet, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function TarekFloatingButton() {
+type TarekFloatingButtonProps = {
+  /** When false, the control is not rendered (not only hidden — removed from the DOM). */
+  canUseAccountant: boolean;
+};
+
+export function TarekFloatingButton({ canUseAccountant }: TarekFloatingButtonProps) {
+  if (!canUseAccountant) {
+    return null;
+  }
+
   const pathname = usePathname();
   
   // Only show on the main dashboard page

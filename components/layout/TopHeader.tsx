@@ -1,13 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Menu, Settings, X } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { navigation } from "@/components/layout/Sidebar";
 import { LogoutConfirmButton } from "@/components/layout/LogoutConfirmButton";
+import { dashboardNavIcons } from "@/components/layout/dashboard-nav-icons";
+import type { DashboardNavItem } from "@/lib/navigation/dashboard-nav";
 
-export function TopHeader() {
+function isLinkActive(pathname: string, href: string): boolean {
+  if (href === "/") {
+    return pathname === "/";
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+type TopHeaderProps = {
+  items: DashboardNavItem[];
+};
+
+export function TopHeader({ items }: TopHeaderProps) {
   const pathname = usePathname();
   const [menuPathname, setMenuPathname] = useState<string | null>(null);
   const isMobileMenuOpen = menuPathname === pathname;
@@ -93,24 +105,29 @@ export function TopHeader() {
           </div>
 
           <nav className="px-3 py-5 space-y-2 overflow-y-auto h-[calc(100%-80px)]">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/");
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() => setMenuPathname(null)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-[#d2ae6d] text-[#052e36]"
-                      : "text-gray-300 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <item.icon className="w-5 h-5 shrink-0" />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
+            {items.length === 0 ? (
+              <p className="px-4 text-xs text-gray-500">No navigation available for this account.</p>
+            ) : (
+              items.map((item) => {
+                const isActive = isLinkActive(pathname, item.href);
+                const Icon = dashboardNavIcons[item.icon] ?? LayoutDashboard;
+                return (
+                  <Link
+                    key={item.name + item.href}
+                    href={item.href}
+                    onClick={() => setMenuPathname(null)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-[#d2ae6d] text-[#052e36]"
+                        : "text-gray-300 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 shrink-0" />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })
+            )}
             <div className="pt-3 mt-3 border-t border-white/10">
               <LogoutConfirmButton
                 triggerClassName="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 transition-colors"

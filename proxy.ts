@@ -1,3 +1,8 @@
+/**
+ * Next.js 16 request boundary (replaces `middleware.ts` at the project root).
+ * Global route protection + Supabase session refresh are implemented in
+ * `lib/supabase/middleware.ts` → `updateSession`.
+ */
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
