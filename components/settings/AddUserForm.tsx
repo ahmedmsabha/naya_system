@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,10 +52,16 @@ export function AddUserForm({ branches }: { branches: BranchOption[] }) {
   const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction] = useActionState(inviteUserAction, initialState);
+  // Controlled values + hidden inputs: some RSC/Server Action + <select> combos omit
+  // "branch_id"/"role" from FormData; hidden fields are always included on submit.
+  const [role, setRole] = useState("");
+  const [branchId, setBranchId] = useState("");
 
   useEffect(() => {
     if (state.status === "success") {
       formRef.current?.reset();
+      setRole("");
+      setBranchId("");
     }
   }, [state.status]);
 
@@ -92,6 +98,8 @@ export function AddUserForm({ branches }: { branches: BranchOption[] }) {
           action={formAction}
           className="space-y-5"
         >
+          <input type="hidden" name="role" value={role} />
+          <input type="hidden" name="branch_id" value={branchId} />
           <div className="space-y-2">
             <FieldLabel htmlFor={`${formId}-full_name`}>Full name</FieldLabel>
             <input
@@ -136,10 +144,10 @@ export function AddUserForm({ branches }: { branches: BranchOption[] }) {
               <FieldLabel htmlFor={`${formId}-role`}>Role</FieldLabel>
               <select
                 id={`${formId}-role`}
-                name="role"
                 required
                 className={cn(inputClassName, "cursor-pointer")}
-                defaultValue=""
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
               >
                 <option value="" disabled>
                   Select role
@@ -153,20 +161,23 @@ export function AddUserForm({ branches }: { branches: BranchOption[] }) {
               <FieldLabel htmlFor={`${formId}-branch`}>Branch</FieldLabel>
               <select
                 id={`${formId}-branch`}
-                name="branch_id"
                 required
                 className={cn(inputClassName, "cursor-pointer")}
-                defaultValue=""
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
               >
                 <option value="" disabled>
                   Select branch
                 </option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                    {b.type === "commissary" ? " (commissary)" : ""}
-                  </option>
-                ))}
+                {branches.map((b) => {
+                  const id = String(b.id);
+                  return (
+                    <option key={id} value={id}>
+                      {b.name}
+                      {b.type === "commissary" ? " (commissary)" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>

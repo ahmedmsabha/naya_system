@@ -15,14 +15,29 @@ export type TeamInviteState =
   | { status: "success"; message: string }
   | { status: "error"; message: string };
 
+// Accept any canonical UUID string (DB / Supabase may emit v1–v5; avoid over‑strict
+// RFC 4122 nibble rules that can reject valid `branches.id` values).
 const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function asUuid(value: string | null): string | null {
   if (value == null) return null;
   const t = value.trim();
   if (!t || !UUID_RE.test(t)) return null;
   return t;
+}
+
+function getFormString(formData: FormData, key: string): string {
+  const direct = formData.get(key);
+  if (typeof direct === "string" && direct.trim() !== "") {
+    return direct.trim();
+  }
+  for (const entry of formData.getAll(key)) {
+    if (typeof entry === "string" && entry.trim() !== "") {
+      return entry.trim();
+    }
+  }
+  return "";
 }
 
 function mapAuthErrorMessage(error: unknown, fallback: string): string {
@@ -56,13 +71,11 @@ export async function inviteUserAction(
     return { status: "error", message: "Unauthorized" };
   }
 
-  const full_name = String(formData.get("full_name") ?? "").trim();
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
+  const full_name = getFormString(formData, "full_name");
+  const email = getFormString(formData, "email").toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const role = String(formData.get("role") ?? "").trim();
-  const branchId = asUuid(String(formData.get("branch_id") ?? ""));
+  const role = getFormString(formData, "role");
+  const branchId = asUuid(getFormString(formData, "branch_id"));
 
   if (!full_name) {
     return { status: "error", message: "Full name is required." };
