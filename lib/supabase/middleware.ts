@@ -117,10 +117,17 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Logged-in users on auth pages: send home — unless the URL has ?error= (e.g. "Invalid Account Setup"
+  // for missing role/branch in JWT), otherwise we loop: / → /login?error → / → …
   if (user && isAuthPage && !isPasswordUpdatePage) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/'
-    return NextResponse.redirect(url)
+    const hasAuthError = request.nextUrl.searchParams.has('error')
+    if (hasAuthError) {
+      // Stay on /login?error=… so the user can read the message and sign out; do not force redirect to /
+    } else {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
   }
 
   if (user && !isServerAction) {
