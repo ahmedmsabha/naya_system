@@ -14,17 +14,33 @@ export default async function WarehouseLayout({
   const supabase = await createClient();
   const { data: branch } = await supabase
     .from("branches")
-    .select("name")
+    .select("name, type")
     .eq("id", id)
     .single();
 
   if (!branch) notFound();
 
+  const isCommissary = branch.type === "commissary";
+
+  let fulfillmentPendingCount = 0;
+  if (isCommissary) {
+    const { count } = await supabase
+      .from("transfers")
+      .select("id", { count: "exact", head: true })
+      .eq("from_branch_id", id)
+      .eq("status", "pending");
+    fulfillmentPendingCount = count ?? 0;
+  }
+
   return (
     <div className="flex flex-col lg:flex-row h-full min-h-[calc(100vh-4rem)] w-full -mx-4 -my-4 md:-mx-8 md:-my-8 overflow-x-hidden print:block print:m-0 print:min-h-0">
       {/* Section navigation: top on mobile, side on desktop */}
       <div className="print:hidden lg:order-last">
-        <WarehouseSidebar branchId={id} />
+        <WarehouseSidebar
+          branchId={id}
+          isCommissary={isCommissary}
+          fulfillmentPendingCount={fulfillmentPendingCount}
+        />
       </div>
 
       {/* Main content */}

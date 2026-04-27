@@ -14,10 +14,10 @@ export default async function WarehouseMainPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; receipt?: string }>;
 }) {
   const { id } = await params;
-  const { date: dateParam } = await searchParams;
+  const { date: dateParam, receipt: receiptParam } = await searchParams;
   const purchaseDateIso = parseWarehouseIsoDate(dateParam);
 
   const supabase = await createClient();
@@ -87,6 +87,8 @@ export default async function WarehouseMainPage({
 
   const headerDate = new Date(`${purchaseDateIso}T12:00:00`);
 
+  const receipt = receiptParam === "ok" ? "ok" : receiptParam === "disputed" ? "disputed" : null;
+
   return (
     <div className="flex flex-col gap-6 md:gap-8 max-w-7xl mx-auto px-0 sm:px-2 md:px-4" dir="ltr">
       <Link
@@ -96,6 +98,24 @@ export default async function WarehouseMainPage({
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
         BACK TO {branch.name.toUpperCase()}
       </Link>
+
+      {receipt === "ok" && (
+        <div
+          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          role="status"
+        >
+          Receipt recorded. This branch&apos;s inventory has been updated for the quantities you confirmed.
+        </div>
+      )}
+      {receipt === "disputed" && (
+        <div
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          role="status"
+        >
+          Receipt saved as <span className="font-bold">disputed</span> because at least one line did not match what was
+          sent. Inventory was still updated to reflect what you entered as received.
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">

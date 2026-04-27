@@ -2,8 +2,10 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { MapPin, ChevronRight, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { redirectNonExecutiveUsersToBranchWarehouse } from "@/lib/navigation/branch-landing";
 
 export default async function GlobalDashboard() {
+  await redirectNonExecutiveUsersToBranchWarehouse();
   const supabase = await createClient();
   const { data: branches, error } = await supabase.from("branches").select("*").order("name");
 

@@ -2,16 +2,32 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Table, FileText, Archive, ChefHat } from "lucide-react";
+import { LayoutDashboard, Table, FileText, Archive, ChefHat, Truck } from "lucide-react";
 
-const navItems = [
+const baseNavItems = [
   { label: "Overview", icon: LayoutDashboard, segment: "" },
   { label: "Schedule", icon: Table, segment: "schedule" },
   { label: "Invoice", icon: FileText, segment: "invoice" },
   { label: "Archive", icon: Archive, segment: "archive" },
-];
+] as const;
 
-export function WarehouseSidebar({ branchId }: { branchId: string }) {
+const commissaryNavItems = [
+  { label: "Fulfillment", icon: Truck, segment: "fulfillment" },
+] as const;
+
+export function WarehouseSidebar({
+  branchId,
+  isCommissary = false,
+  fulfillmentPendingCount = 0,
+}: {
+  branchId: string;
+  isCommissary?: boolean;
+  /** Pending transfers to dispatch from this commissary */
+  fulfillmentPendingCount?: number;
+}) {
+  const navItems = isCommissary
+    ? [...baseNavItems.slice(0, 1), ...commissaryNavItems, ...baseNavItems.slice(1)]
+    : [...baseNavItems];
   const pathname = usePathname();
   const base = `/branch/${branchId}/warehouse`;
 
@@ -30,14 +46,21 @@ export function WarehouseSidebar({ branchId }: { branchId: string }) {
                 key={`mobile-${item.segment || "overview"}`}
                 href={href}
                 prefetch
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all max-w-[13rem] ${
                   isActive
                     ? "bg-[#2563eb] text-white shadow-lg shadow-blue-200"
                     : "bg-gray-50 text-gray-500 hover:text-[#052e36] hover:bg-gray-100"
                 }`}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
-                <span>{item.label}</span>
+                <span className="flex-1 min-w-0">{item.label}</span>
+                {item.segment === "fulfillment" &&
+                isCommissary &&
+                fulfillmentPendingCount > 0 ? (
+                  <span className="shrink-0 min-w-[1.25rem] h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
+                    {fulfillmentPendingCount > 99 ? "99+" : fulfillmentPendingCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -81,7 +104,14 @@ export function WarehouseSidebar({ branchId }: { branchId: string }) {
                 }`}
               >
                 <item.icon className={`w-5 h-5 shrink-0 transition-transform ${isActive ? "scale-110" : "group-hover:scale-110"}`} />
-                <span>{item.label}</span>
+                <span className="flex-1 min-w-0 text-left">{item.label}</span>
+                {item.segment === "fulfillment" &&
+                isCommissary &&
+                fulfillmentPendingCount > 0 ? (
+                  <span className="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
+                    {fulfillmentPendingCount > 99 ? "99+" : fulfillmentPendingCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
