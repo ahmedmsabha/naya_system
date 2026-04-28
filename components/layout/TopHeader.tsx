@@ -116,14 +116,19 @@ export function TopHeader({ items }: TopHeaderProps) {
                     key={item.name + item.href}
                     href={item.href}
                     onClick={() => setMenuPathname(null)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors w-full ${
                       isActive
                         ? "bg-[#d2ae6d] text-[#052e36]"
                         : "text-gray-300 hover:text-white hover:bg-white/10"
                     }`}
                   >
                     <Icon className="w-5 h-5 shrink-0" />
-                    <span>{item.name}</span>
+                    <span className="min-w-0 flex-1">{item.name}</span>
+                    {item.badgeCount != null && item.badgeCount > 0 ? (
+                      <span className="shrink-0 min-w-6 h-6 rounded-full bg-rose-500 text-white text-xs font-bold flex items-center justify-center">
+                        {item.badgeCount > 99 ? "99+" : item.badgeCount}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })

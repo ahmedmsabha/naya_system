@@ -72,6 +72,16 @@ export function AddUserForm({ branches }: { branches: BranchOption[] }) {
         <CardDescription>
           Creates an account with role and branch stored in their profile and sign-in session.
         </CardDescription>
+        <p className="text-sm text-muted-foreground max-w-xl leading-relaxed -mt-2">
+          <span className="font-medium text-foreground/90">Commissary (ships to restaurants):</span> choose{" "}
+          <span className="font-medium">warehouse manager</span> for day-to-day inventory and dispatch, or{" "}
+          <span className="font-medium">branch manager</span> for the same plus dashboard, staff, and payroll.{" "}
+          <span className="font-medium">Branch staff</span> can use warehouse and financials but cannot dispatch.{" "}
+          <span className="block mt-2">
+            <span className="font-medium text-foreground/90">Restaurant locations:</span> branch manager for leadership;
+            branch staff for daily warehouse and local financials.
+          </span>
+        </p>
       </CardHeader>
       <CardContent className="space-y-6">
         {state.status === "error" && (

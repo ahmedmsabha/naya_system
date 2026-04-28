@@ -7,6 +7,7 @@ import { toMoney } from "@/lib/domain/money";
 export type BranchHubData = {
   branchId: string;
   branchName: string;
+  branchType: string;
   period: string;
   kpis: {
     warehouseValue: number;
@@ -33,7 +34,7 @@ export async function getBranchHubData(branchId: string, period: string): Promis
     { data: staffRows },
     { data: inventoryRows },
   ] = await Promise.all([
-    supabase.from("branches").select("name").eq("id", branchId).single(),
+    supabase.from("branches").select("name, type").eq("id", branchId).single(),
     supabase
       .from("sales")
       .select("total_revenue")
@@ -87,6 +88,7 @@ export async function getBranchHubData(branchId: string, period: string): Promis
   return {
     branchId,
     branchName: String(branch.name ?? ""),
+    branchType: String(branch.type ?? "branch"),
     period,
     kpis: {
       warehouseValue: toMoney(warehouseValue),

@@ -1,12 +1,13 @@
 import Link from "next/link";
 import type { ComponentType } from "react";
-import { ArrowLeft, BarChart3, ChevronRight, Truck, Users, Warehouse } from "lucide-react";
+import { ArrowLeft, BarChart3, ChevronRight, ScanLine, Truck, Users, Warehouse } from "lucide-react";
 import { parsePeriod, monthKeyNow, addMonths, monthLabel } from "@/lib/domain/date";
 import {
   formatAccountingCurrency,
   isNetLoss,
   netProfitLossLabel,
 } from "@/lib/domain/money";
+import { requireBranchHubAccessOrRedirect } from "@/lib/navigation/branch-landing";
 import { getBranchHubData } from "./queries";
 
 export default async function BranchDashboard({
@@ -17,6 +18,7 @@ export default async function BranchDashboard({
   searchParams: Promise<{ period?: string }>;
 }) {
   const { id } = await params;
+  await requireBranchHubAccessOrRedirect(id);
   const sp = await searchParams;
   const selectedPeriod = parsePeriod(sp.period, monthKeyNow());
   const data = await getBranchHubData(id, selectedPeriod);
@@ -119,6 +121,27 @@ export default async function BranchDashboard({
           </form>
         </div>
       </div>
+
+      {data.branchType === "branch" && (
+        <div className="rounded-3xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-6 shadow-[0_16px_40px_-28px_rgba(37,99,235,0.45)]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Logistics</p>
+              <p className="mt-1 text-lg font-black text-[#052e36]">Incoming commissary shipment?</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Open the scanner to receive against a label QR and update branch stock.
+              </p>
+            </div>
+            <Link
+              href={`/branch/${id}/orders/scan`}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-[#2563eb] px-6 py-3.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-200/50 hover:bg-blue-600 transition-colors"
+            >
+              <ScanLine className="w-5 h-5" />
+              Scan incoming shipment
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {modules.map((module) => (
