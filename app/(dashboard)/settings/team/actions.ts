@@ -40,10 +40,14 @@ function getFormString(formData: FormData, key: string): string {
   return "";
 }
 
+/** Maps Supabase errors to actionable UI copy (Auth Admin requires the project's secret/service_role key). */
 function mapAuthErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "message" in error) {
     const msg = String((error as { message?: string }).message ?? "");
     const m = msg.toLowerCase();
+    if (m.includes("invalid api key")) {
+      return invalidApiKeyHint();
+    }
     if (m.includes("already been registered") || m.includes("already exists") || m.includes("already registered")) {
       return "A user with this email already exists.";
     }
@@ -53,9 +57,21 @@ function mapAuthErrorMessage(error: unknown, fallback: string): string {
     if (msg) return msg;
   }
   if (error instanceof Error && error.message) {
+    const em = error.message.toLowerCase();
+    if (em.includes("invalid api key")) {
+      return invalidApiKeyHint();
+    }
     return error.message;
   }
   return fallback;
+}
+
+function invalidApiKeyHint(): string {
+  return (
+    "Supabase rejected the server secret key (often mis-set anon/publishable key or wrong project). " +
+    "Set SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY to this project's secret/service_role key from the dashboard " +
+    "(Project Settings → API), matching NEXT_PUBLIC_SUPABASE_URL."
+  );
 }
 
 /**
@@ -130,6 +146,10 @@ export async function inviteUserAction(
     }
     if (profileError.code === "23505") {
       return { status: "error", message: "This user profile could not be created (duplicate or conflict)." };
+    }
+    const pm = (profileError.message || "").toLowerCase();
+    if (pm.includes("invalid api key")) {
+      return { status: "error", message: invalidApiKeyHint() };
     }
     return { status: "error", message: profileError.message || "Could not create the user profile." };
   }
