@@ -109,7 +109,15 @@ export async function inviteUserAction(
     return { status: "error", message: "A valid branch is required." };
   }
 
-  const admin = createAdminClient();
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (err) {
+    const msg =
+      err instanceof Error ? err.message : "Could not initialize Supabase admin client.";
+    return { status: "error", message: msg };
+  }
+
   const branchIdMetadata = branchId; // string in metadata for consistent JWT/RLS casting
 
   const { data: created, error: createError } = await admin.auth.admin.createUser({
